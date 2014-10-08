@@ -142,6 +142,14 @@ typedef struct CPUWatchpoint {
     QTAILQ_ENTRY(CPUWatchpoint) entry;
 } CPUWatchpoint;
 
+typedef struct CPUFetchStoreShadow {
+    target_ulong vaddr;
+    target_ulong paddr;
+    target_ulong bsize;
+    target_ulong prevalue;
+    target_ulong pstvalue;
+} CPUFetchStoreShadow;
+
 #define CPU_TEMP_BUF_NLONGS 128
 #define CPU_COMMON                                                      \
     /* soft mmu support */                                              \
@@ -167,9 +175,9 @@ typedef struct CPUWatchpoint {
                                                                         \
     /* from this point: preserved by CPU reset */                       \
     /* ice debug support */                                             \
-    QTAILQ_HEAD(breakpoints_head, CPUBreakpoint) breakpoints;            \
+    QTAILQ_HEAD(breakpoints_head, CPUBreakpoint) breakpoints;           \
                                                                         \
-    QTAILQ_HEAD(watchpoints_head, CPUWatchpoint) watchpoints;            \
+    QTAILQ_HEAD(watchpoints_head, CPUWatchpoint) watchpoints;           \
     CPUWatchpoint *watchpoint_hit;                                      \
                                                                         \
     /* Core interrupt code */                                           \
@@ -178,5 +186,8 @@ typedef struct CPUWatchpoint {
                                                                         \
     /* user data */                                                     \
     void *opaque;                                                       \
+                                                                        \
+    /* current instruction flag */                                      \
+    unsigned qtrace_instflags;                                          \
 
 #endif

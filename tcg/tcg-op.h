@@ -48,6 +48,13 @@ static inline void tcg_gen_op1i(TCGOpcode opc, TCGArg arg1)
     *tcg_ctx.gen_opparam_ptr++ = arg1;
 }
 
+static inline void tcg_gen_op2i(TCGOpcode opc, TCGArg arg1, TCGArg arg2)
+{
+    *tcg_ctx.gen_opc_ptr++ = opc;
+    *tcg_ctx.gen_opparam_ptr++ = arg1;
+    *tcg_ctx.gen_opparam_ptr++ = arg2;
+}
+
 static inline void tcg_gen_op2_i32(TCGOpcode opc, TCGv_i32 arg1, TCGv_i32 arg2)
 {
     *tcg_ctx.gen_opc_ptr++ = opc;
@@ -2707,6 +2714,12 @@ static inline void tcg_gen_qemu_st64(TCGv_i64 arg, TCGv addr, int mem_index)
 {
     tcg_gen_qemu_st_i64(arg, addr, mem_index, MO_TEQ);
 }
+
+static inline void tcg_gen_qemu_xlate(TCGv ret, TCGv addr, int mem_index)
+{
+    // tcg_gen_qemu_xlate_tl(ret, addr, mem_index);
+}
+
 
 #if TARGET_LONG_BITS == 64
 #define tcg_gen_movi_tl tcg_gen_movi_i64

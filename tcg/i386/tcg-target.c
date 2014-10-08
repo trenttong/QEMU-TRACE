@@ -23,6 +23,7 @@
  */
 
 #include "tcg-be-ldst.h"
+#include "qtrace.h"
 
 #ifndef NDEBUG
 static const char * const tcg_target_reg_names[TCG_TARGET_NB_REGS] = {
@@ -34,6 +35,7 @@ static const char * const tcg_target_reg_names[TCG_TARGET_NB_REGS] = {
 #endif
 };
 #endif
+
 
 static const int tcg_target_reg_alloc_order[] = {
 #if TCG_TARGET_REG_BITS == 64
@@ -110,6 +112,7 @@ static bool have_cmov;
 #else
 # define have_cmov 0
 #endif
+
 
 static uint8_t *tb_ret_addr;
 
@@ -1120,6 +1123,7 @@ static inline void tcg_out_tlb_load(TCGContext *s, TCGReg addrlo, TCGReg addrhi,
     /* jne slow_path */
     tcg_out_opc(s, OPC_JCC_long + JCC_JNE, 0, 0, 0);
     label_ptr[0] = s->code_ptr;
+
     s->code_ptr += 4;
 
     if (TARGET_LONG_BITS > TCG_TARGET_REG_BITS) {
@@ -1137,6 +1141,250 @@ static inline void tcg_out_tlb_load(TCGContext *s, TCGReg addrlo, TCGReg addrhi,
     /* add addend(r0), r1 */
     tcg_out_modrm_offset(s, OPC_ADD_GvEv + hrexw, r1, r0,
                          offsetof(CPUTLBEntry, addend) - which);
+}
+
+static inline void tcg_out_tlb_load_trace_vma(TCGContext *s, TCGReg addrlo, TCGReg addrhi,
+                                              int mem_index, TCGMemOp s_bits,
+                                              uint8_t **label_ptr, int which)
+{
+    const TCGReg r0 = TCG_REG_L0;
+    const TCGReg r1 = TCG_REG_L1;
+    TCGType ttype = TCG_TYPE_I32;
+    TCGType htype = TCG_TYPE_I32;
+    int trexw = 0, hrexw = 0;
+
+    if (TCG_TARGET_REG_BITS == 64) {
+        if (TARGET_LONG_BITS == 64) {
+            ttype = TCG_TYPE_I64;
+            trexw = P_REXW;
+        }
+        if (TCG_TYPE_PTR == TCG_TYPE_I64) {
+            htype = TCG_TYPE_I64;
+            hrexw = P_REXW;
+        }
+    }
+
+    tcg_out_mov(s, htype, r0, addrlo);
+    tcg_out_mov(s, ttype, r1, addrlo);
+
+    /* save the virtual address in the instrumentation area */
+    bool isfetch = (which ==  offsetof(CPUTLBEntry, addr_read)); 
+    unsigned offset = isfetch ? 
+                      offsetof(CPUArchState, fetch_shadow.vaddr) : 
+                      offsetof(CPUArchState, store_shadow.vaddr);
+    tcg_out_modrm_offset(s, OPC_MOVL_EvGv+trexw, r0, TCG_AREG0, offset);
+
+    tcg_out_shifti(s, SHIFT_SHR + hrexw, r0,
+                   TARGET_PAGE_BITS - CPU_TLB_ENTRY_BITS);
+
+    tgen_arithi(s, ARITH_AND + trexw, r1,
+                TARGET_PAGE_MASK | ((1 << s_bits) - 1), 0);
+    tgen_arithi(s, ARITH_AND + hrexw, r0,
+                (CPU_TLB_SIZE - 1) << CPU_TLB_ENTRY_BITS, 0);
+
+    tcg_out_modrm_sib_offset(s, OPC_LEA + hrexw, r0, TCG_AREG0, r0, 0,
+                             offsetof(CPUArchState, tlb_table[mem_index][0])
+                             + which);
+
+    /* cmp 0(r0), r1 */
+    tcg_out_modrm_offset(s, OPC_CMP_GvEv + trexw, r1, r0, 0);
+
+    /* Prepare for both the fast path add of the tlb addend, and the slow
+       path function argument setup.  There are two cases worth note:
+       For 32-bit guest and x86_64 host, MOVL zero-extends the guest address
+       before the fastpath ADDQ below.  For 64-bit guest and x32 host, MOVQ
+       copies the entire guest address for the slow path, while truncation
+       for the 32-bit host happens with the fastpath ADDL below.  */
+    tcg_out_mov(s, ttype, r1, addrlo);
+
+    /* jne slow_path */
+    tcg_out_opc(s, OPC_JCC_long + JCC_JNE, 0, 0, 0);
+    label_ptr[0] = s->code_ptr;
+    s->code_ptr += 4;
+
+    if (TARGET_LONG_BITS > TCG_TARGET_REG_BITS) {
+        /* cmp 4(r0), addrhi */
+        tcg_out_modrm_offset(s, OPC_CMP_GvEv, addrhi, r0, 4);
+
+        /* jne slow_path */
+        tcg_out_opc(s, OPC_JCC_long + JCC_JNE, 0, 0, 0);
+        label_ptr[1] = s->code_ptr;
+        s->code_ptr += 4;
+    }
+
+    /* TLB Hit.  */
+
+    /* add addend(r0), r1 */
+    tcg_out_modrm_offset(s, OPC_ADD_GvEv + hrexw, r1, r0,
+                         offsetof(CPUTLBEntry, addend) - which);
+}
+
+static inline void tcg_out_tlb_load_trace_pma(TCGContext *s, TCGReg addrlo, TCGReg addrhi,
+                                              int mem_index, TCGMemOp s_bits,
+                                              uint8_t **label_ptr, int which)
+{
+    const TCGReg r0 = TCG_REG_L0;
+    const TCGReg r1 = TCG_REG_L1;
+    TCGType ttype = TCG_TYPE_I32;
+    TCGType htype = TCG_TYPE_I32;
+    int trexw = 0, hrexw = 0;
+
+    if (TCG_TARGET_REG_BITS == 64) {
+        if (TARGET_LONG_BITS == 64) {
+            ttype = TCG_TYPE_I64;
+            trexw = P_REXW;
+        }
+        if (TCG_TYPE_PTR == TCG_TYPE_I64) {
+            htype = TCG_TYPE_I64;
+            hrexw = P_REXW;
+        }
+    }
+
+    tcg_out_mov(s, htype, r0, addrlo);
+    tcg_out_mov(s, ttype, r1, addrlo);
+
+    tcg_out_shifti(s, SHIFT_SHR + hrexw, r0,
+                   TARGET_PAGE_BITS - CPU_TLB_ENTRY_BITS);
+
+    tgen_arithi(s, ARITH_AND + trexw, r1,
+                TARGET_PAGE_MASK | ((1 << s_bits) - 1), 0);
+    tgen_arithi(s, ARITH_AND + hrexw, r0,
+                (CPU_TLB_SIZE - 1) << CPU_TLB_ENTRY_BITS, 0);
+
+    tcg_out_modrm_sib_offset(s, OPC_LEA + hrexw, r0, TCG_AREG0, r0, 0,
+                             offsetof(CPUArchState, tlb_table[mem_index][0])
+                             + which);
+
+    /* cmp 0(r0), r1 */
+    tcg_out_modrm_offset(s, OPC_CMP_GvEv + trexw, r1, r0, 0);
+
+    /* Prepare for both the fast path add of the tlb addend, and the slow
+       path function argument setup.  There are two cases worth note:
+       For 32-bit guest and x86_64 host, MOVL zero-extends the guest address
+       before the fastpath ADDQ below.  For 64-bit guest and x32 host, MOVQ
+       copies the entire guest address for the slow path, while truncation
+       for the 32-bit host happens with the fastpath ADDL below.  */
+    tcg_out_mov(s, ttype, r1, addrlo);
+
+    /* jne slow_path */
+    tcg_out_opc(s, OPC_JCC_long + JCC_JNE, 0, 0, 0);
+    label_ptr[0] = s->code_ptr;
+    s->code_ptr += 4;
+
+    if (TARGET_LONG_BITS > TCG_TARGET_REG_BITS) {
+        /* cmp 4(r0), addrhi */
+        tcg_out_modrm_offset(s, OPC_CMP_GvEv, addrhi, r0, 4);
+
+        /* jne slow_path */
+        tcg_out_opc(s, OPC_JCC_long + JCC_JNE, 0, 0, 0);
+        label_ptr[1] = s->code_ptr;
+        s->code_ptr += 4;
+    }
+
+    /* TLB Hit.  */
+
+    /* add addend(r0), r1 */
+    tcg_out_modrm_offset(s, OPC_ADD_GvEv + hrexw, r1, r0,
+                         offsetof(CPUTLBEntry, addend) - which);
+
+    /* save the physical address in the instrumentation area */
+    tcg_out_mov(s, htype, r0, r1);
+    /* FIX-ME-XIN-TONG */
+    tcg_out_addi(s, r0, 10000);
+
+    bool isfetch = (which ==  offsetof(CPUTLBEntry, addr_read)); 
+    unsigned offset = isfetch ? 
+                      offsetof(CPUArchState, fetch_shadow.paddr): 
+                      offsetof(CPUArchState, store_shadow.paddr);
+    tcg_out_modrm_offset(s, OPC_MOVL_EvGv+hrexw, r0, TCG_AREG0, offset);
+}
+
+
+static inline void tcg_out_tlb_load_trace_vpma(TCGContext *s, TCGReg addrlo, TCGReg addrhi,
+                                               int mem_index, TCGMemOp s_bits,
+                                               uint8_t **label_ptr, int which)
+{
+    const TCGReg r0 = TCG_REG_L0;
+    const TCGReg r1 = TCG_REG_L1;
+    TCGType ttype = TCG_TYPE_I32;
+    TCGType htype = TCG_TYPE_I32;
+    int trexw = 0, hrexw = 0;
+
+    if (TCG_TARGET_REG_BITS == 64) {
+        if (TARGET_LONG_BITS == 64) {
+            ttype = TCG_TYPE_I64;
+            trexw = P_REXW;
+        }
+        if (TCG_TYPE_PTR == TCG_TYPE_I64) {
+            htype = TCG_TYPE_I64;
+            hrexw = P_REXW;
+        }
+    }
+
+    tcg_out_mov(s, htype, r0, addrlo);
+    tcg_out_mov(s, ttype, r1, addrlo);
+
+    /* save the virtual address in the instrumentation area */
+    bool isfetch = (which ==  offsetof(CPUTLBEntry, addr_read)); 
+    unsigned offset = isfetch ? 
+                      offsetof(CPUArchState, fetch_shadow.vaddr): 
+                      offsetof(CPUArchState, store_shadow.vaddr);
+    tcg_out_modrm_offset(s, OPC_MOVL_EvGv+trexw, r0, TCG_AREG0, offset);
+
+    tcg_out_shifti(s, SHIFT_SHR + hrexw, r0,
+                   TARGET_PAGE_BITS - CPU_TLB_ENTRY_BITS);
+
+    tgen_arithi(s, ARITH_AND + trexw, r1,
+                TARGET_PAGE_MASK | ((1 << s_bits) - 1), 0);
+    tgen_arithi(s, ARITH_AND + hrexw, r0,
+                (CPU_TLB_SIZE - 1) << CPU_TLB_ENTRY_BITS, 0);
+
+    tcg_out_modrm_sib_offset(s, OPC_LEA + hrexw, r0, TCG_AREG0, r0, 0,
+                             offsetof(CPUArchState, tlb_table[mem_index][0])
+                             + which);
+
+    /* cmp 0(r0), r1 */
+    tcg_out_modrm_offset(s, OPC_CMP_GvEv + trexw, r1, r0, 0);
+
+    /* Prepare for both the fast path add of the tlb addend, and the slow
+       path function argument setup.  There are two cases worth note:
+       For 32-bit guest and x86_64 host, MOVL zero-extends the guest address
+       before the fastpath ADDQ below.  For 64-bit guest and x32 host, MOVQ
+       copies the entire guest address for the slow path, while truncation
+       for the 32-bit host happens with the fastpath ADDL below.  */
+    tcg_out_mov(s, ttype, r1, addrlo);
+
+    /* jne slow_path */
+    tcg_out_opc(s, OPC_JCC_long + JCC_JNE, 0, 0, 0);
+    label_ptr[0] = s->code_ptr;
+    s->code_ptr += 4;
+
+    if (TARGET_LONG_BITS > TCG_TARGET_REG_BITS) {
+        /* cmp 4(r0), addrhi */
+        tcg_out_modrm_offset(s, OPC_CMP_GvEv, addrhi, r0, 4);
+
+        /* jne slow_path */
+        tcg_out_opc(s, OPC_JCC_long + JCC_JNE, 0, 0, 0);
+        label_ptr[1] = s->code_ptr;
+        s->code_ptr += 4;
+    }
+
+    /* TLB Hit.  */
+
+
+    /* add addend(r0), r1 */
+    tcg_out_modrm_offset(s, OPC_ADD_GvEv + hrexw, r1, r0,
+                         offsetof(CPUTLBEntry, addend) - which);
+
+    /* save the physical address in the instrumentation area */
+    tcg_out_mov(s, htype, r0, r1);
+    /* FIX-ME-XIN-TONG */
+    tcg_out_addi(s, r0, 10000);
+
+    offset = isfetch ? 
+             offsetof(CPUArchState, fetch_shadow.paddr): 
+             offsetof(CPUArchState, store_shadow.paddr);
+    tcg_out_modrm_offset(s, OPC_MOVL_EvGv+hrexw, r0, TCG_AREG0, offset);
 }
 
 /*
@@ -1386,6 +1634,7 @@ static void tcg_out_qemu_ld_direct(TCGContext *s, TCGReg datalo, TCGReg datahi,
                 tcg_out_bswap64(s, datalo);
             }
         } else {
+            assert(0 && "QTRACE unimplemented");
             if (bswap) {
                 int t = datalo;
                 datalo = datahi;
@@ -1413,6 +1662,7 @@ static void tcg_out_qemu_ld_direct(TCGContext *s, TCGReg datalo, TCGReg datahi,
     }
 }
 
+
 /* XXX: qemu_ld and qemu_st could be modified to clobber only EDX and
    EAX. It will be useful once fixed registers globals are less
    common. */
@@ -1423,9 +1673,11 @@ static void tcg_out_qemu_ld(TCGContext *s, const TCGArg *args, bool is64)
     TCGMemOp opc;
 #if defined(CONFIG_SOFTMMU)
     int mem_index;
+    int mem_trace;
     TCGMemOp s_bits;
-    uint8_t *label_ptr[2];
+    uint8_t *label_ptr[2] = { 0, 0 };
 #endif
+    unsigned maddrs = 0;
 
     datalo = *args++;
     datahi = (TCG_TARGET_REG_BITS == 32 && is64 ? *args++ : 0);
@@ -1435,13 +1687,53 @@ static void tcg_out_qemu_ld(TCGContext *s, const TCGArg *args, bool is64)
 
 #if defined(CONFIG_SOFTMMU)
     mem_index = *args++;
+    mem_trace = QTRACE_EXT_MEMTRACE(mem_index);
+    mem_index = QTRACE_EXT_MEMINDEX(mem_index);
     s_bits = opc & MO_SIZE;
 
-    tcg_out_tlb_load(s, addrlo, addrhi, mem_index, s_bits,
-                     label_ptr, offsetof(CPUTLBEntry, addr_read));
+    /* record the size */
+    if (QTRACE_MEMTRACE_FETCH_EXT_MSIZE(mem_trace)) 
+    {
+       tcg_out_movi(s, TCG_TYPE_I32, TCG_REG_L0, (1<<s_bits));
+       tcg_out_modrm_offset(s, OPC_MOVL_EvGv+P_REXW, TCG_REG_L0, TCG_AREG0, offsetof(CPUArchState, fetch_shadow.bsize));
+    }
+
+    if ((maddrs = (QTRACE_MEMTRACE_FETCH_EXT_ADDRS(mem_trace))))
+    {
+       switch(maddrs)
+       {
+       case QTRACE_MEMTRACE_FETCH_VMA:
+            tcg_out_tlb_load_trace_vma(s, addrlo, addrhi, mem_index, s_bits, label_ptr, offsetof(CPUTLBEntry, addr_read));
+            break;
+       case QTRACE_MEMTRACE_FETCH_PMA:
+            tcg_out_tlb_load_trace_pma(s, addrlo, addrhi, mem_index, s_bits, label_ptr, offsetof(CPUTLBEntry, addr_read));
+            break;
+       case QTRACE_MEMTRACE_FETCH_VPMA:
+            tcg_out_tlb_load_trace_vpma(s, addrlo, addrhi, mem_index, s_bits, label_ptr, offsetof(CPUTLBEntry, addr_read));
+            break;
+       default:
+            perror("QTRACE not implemented memory tracing");
+            break;
+       }
+    }
+    else 
+    {
+       tcg_out_tlb_load(s, addrlo, addrhi, mem_index, s_bits, label_ptr, offsetof(CPUTLBEntry, addr_read));
+    }
 
     /* TLB Hit.  */
     tcg_out_qemu_ld_direct(s, datalo, datahi, TCG_REG_L1, 0, 0, opc);
+
+    /* Record the loaded value */
+    if (QTRACE_MEMTRACE_FETCH_EXT_PREOP_VALUE(mem_trace)) 
+    {
+       tcg_out_modrm_offset(s, OPC_MOVL_EvGv+P_REXW, datalo, TCG_AREG0, offsetof(CPUArchState, fetch_shadow.prevalue));
+    }
+
+    if (QTRACE_MEMTRACE_FETCH_EXT_PSTOP_VALUE(mem_trace)) 
+    {
+       tcg_out_modrm_offset(s, OPC_MOVL_EvGv+P_REXW, datalo, TCG_AREG0, offsetof(CPUArchState, fetch_shadow.pstvalue));
+    }
 
     /* Record the current context of a load into ldst label */
     add_qemu_ldst_label(s, 1, opc, datalo, datahi, addrlo, addrhi,
@@ -1545,9 +1837,12 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, bool is64)
     TCGMemOp opc;
 #if defined(CONFIG_SOFTMMU)
     int mem_index;
+    int mem_trace;
     TCGMemOp s_bits;
     uint8_t *label_ptr[2];
 #endif
+
+    unsigned maddrs = 0;
 
     datalo = *args++;
     datahi = (TCG_TARGET_REG_BITS == 32 && is64 ? *args++ : 0);
@@ -1557,13 +1852,57 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, bool is64)
 
 #if defined(CONFIG_SOFTMMU)
     mem_index = *args++;
+    mem_trace = QTRACE_EXT_MEMTRACE(mem_index);
+    mem_index = QTRACE_EXT_MEMINDEX(mem_index);
     s_bits = opc & MO_SIZE;
 
-    tcg_out_tlb_load(s, addrlo, addrhi, mem_index, s_bits,
-                     label_ptr, offsetof(CPUTLBEntry, addr_write));
+    /* record the size */
+    if (QTRACE_MEMTRACE_STORE_EXT_MSIZE(mem_trace)) 
+    {
+       tcg_out_movi(s, TCG_TYPE_I32, TCG_REG_L0, (1<<s_bits));
+       tcg_out_modrm_offset(s, OPC_MOVL_EvGv+P_REXW, TCG_REG_L0, TCG_AREG0, offsetof(CPUArchState, store_shadow.bsize));
+    }
+
+    /* record the memory address */
+    if ((maddrs=QTRACE_MEMTRACE_STORE_EXT_ADDRS(mem_trace)))
+    {
+       switch(maddrs)
+       {
+       case QTRACE_MEMTRACE_STORE_VMA:
+            tcg_out_tlb_load_trace_vma(s, addrlo, addrhi, mem_index, s_bits, label_ptr, offsetof(CPUTLBEntry, addr_write));
+            break;
+       case QTRACE_MEMTRACE_STORE_PMA:
+            tcg_out_tlb_load_trace_pma(s, addrlo, addrhi, mem_index, s_bits, label_ptr, offsetof(CPUTLBEntry, addr_write));
+            break;
+       case QTRACE_MEMTRACE_STORE_VPMA:
+            tcg_out_tlb_load_trace_vpma(s, addrlo, addrhi, mem_index, s_bits, label_ptr, offsetof(CPUTLBEntry, addr_write));
+            break;
+       default:
+            perror("QTRACE not implemented memory tracing");
+            break;
+       }
+    } 
+    else 
+    {
+       /* we are not tracing any addresses */
+       tcg_out_tlb_load(s, addrlo, addrhi, mem_index, s_bits, label_ptr, offsetof(CPUTLBEntry, addr_write));
+    }
+
+    /* record the value before store */
+    if (QTRACE_MEMTRACE_STORE_EXT_PREOP_VALUE(mem_trace)) 
+    {
+       tcg_out_qemu_ld_direct(s, TCG_REG_L0, TCG_REG_L0, TCG_REG_L1, 0, 0, opc);
+       tcg_out_qemu_st_direct(s, TCG_REG_L0, TCG_REG_L0, TCG_AREG0, offsetof(CPUArchState, store_shadow.prevalue), 0, opc);
+    }
 
     /* TLB Hit.  */
     tcg_out_qemu_st_direct(s, datalo, datahi, TCG_REG_L1, 0, 0, opc);
+
+    /* record the value after store */
+    if (QTRACE_MEMTRACE_STORE_EXT_PSTOP_VALUE(mem_trace)) 
+    { 
+       tcg_out_qemu_st_direct(s, datalo, datahi, TCG_AREG0, offsetof(CPUArchState, store_shadow.pstvalue), 0, opc);
+    }
 
     /* Record the current context of a store into ldst label */
     add_qemu_ldst_label(s, 0, opc, datalo, datahi, addrlo, addrhi,
@@ -1594,6 +1933,158 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, bool is64)
 #endif
 }
 
+/* QTRACE - macros to set up arguments for instrumentation calls */
+static inline void tcg_out_qtrace_instrument_reg_setup(TCGContext *s, 
+                                                       InstrumentContext *icontext, 
+                                                       int rm, int offset)
+{
+    /* load from the shadow area */
+    if (QTRACE_PREINST(icontext))
+    {
+        tcg_out_qemu_ld_direct(s, TCG_REG_RAX, TCG_REG_RAX, TCG_AREG0, 
+                               offsetof(CPUArchState, shadowcpu_offset), 
+                               0, MO_Q);
+        tgen_arithr(s, ARITH_ADD + P_REXW, TCG_REG_RAX, TCG_AREG0);
+        tcg_out_modrm_offset(s, OPC_MOVL_GvEv+P_REXW, 
+                             tcg_target_call_iarg_regs[rm], 
+                             TCG_REG_RAX, offset);		
+
+        goto reg_argument_setup;
+    }
+
+    tcg_out_modrm_offset(s, OPC_MOVL_GvEv+P_REXW, tcg_target_call_iarg_regs[rm], 
+                         TCG_AREG0, offset);		
+reg_argument_setup:
+    return;
+}
+
+static inline void tcg_out_qtrace_instrument_stk_setup(TCGContext *s, 
+                                                       InstrumentContext *icontext, 
+                                                       int offset)
+{
+    /* load from the shadow area */
+    if (QTRACE_PREINST(icontext))
+    {
+        tcg_out_qemu_ld_direct(s, TCG_REG_RAX, TCG_REG_RAX, TCG_AREG0, 
+                               offsetof(CPUArchState, shadowcpu_offset), 
+                               0, MO_Q);
+        tgen_arithr(s, ARITH_ADD + P_REXW, TCG_REG_RAX, TCG_AREG0);
+        tcg_out_modrm_offset(s, OPC_MOVL_GvEv+P_REXW, TCG_REG_RAX, TCG_REG_RAX, offset);		
+        tcg_out_push(s, TCG_REG_RAX);             
+        goto stk_argument_setup;
+    }
+
+    tcg_out_modrm_offset(s, OPC_MOVL_GvEv+P_REXW, TCG_REG_RAX, TCG_AREG0, offset);		
+    tcg_out_push(s, TCG_REG_RAX);             
+stk_argument_setup:
+    return;
+}
+
+static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *icontext)
+{
+    int idx = 0;
+    const int regcount = sizeof(tcg_target_call_iarg_regs)/sizeof(int);
+    unsigned  currreg = 0, ciarg = icontext->ciarg, paramcount = 0;
+    unsigned stack_offset[QTRACE_MAX_IARGS];
+    unsigned stk_paramcount = 0;
+
+    /* first 6 integral arguments go into registers. */
+    /* if more than 6 integral parameters, then pass rest on stack */
+    for(idx = 0, currreg=0; idx<ciarg; ++idx)
+    {
+        bool use_reg = currreg<regcount;
+        unsigned offset = 0;
+        switch(icontext->iargs[idx])
+        {
+        /// ---------------------------------- ///
+        /// register trace  
+        /// ---------------------------------- ///
+        case QTRACE_REGTRACE_VALUE:
+             offset = icontext->iargs[++idx];
+             ++paramcount;
+             break;
+        /// ---------------------------------- ///
+        /// memory trace  
+        /// ---------------------------------- ///
+        case QTRACE_MEMTRACE_FETCH_VMA:
+        case QTRACE_MEMTRACE_FETCH_PMA:
+        case QTRACE_MEMTRACE_FETCH_MSIZE:
+        case QTRACE_MEMTRACE_FETCH_PREOP_VALUE:
+        case QTRACE_MEMTRACE_FETCH_PSTOP_VALUE:
+        case QTRACE_MEMTRACE_STORE_VMA:
+        case QTRACE_MEMTRACE_STORE_PMA:
+        case QTRACE_MEMTRACE_STORE_MSIZE:
+        case QTRACE_MEMTRACE_STORE_PREOP_VALUE:
+        case QTRACE_MEMTRACE_STORE_PSTOP_VALUE:
+             offset = icontext->iargs[++idx];
+             break;
+        /// ---------------------------------- ///
+        /// process ID trace.  
+        /// ---------------------------------- ///
+        case QTRACE_PROCESS_UPID:
+	          /* use CR[3] as the unique process ID */
+             offset = offsetof(CPUArchState, cr[3]);
+	          break;
+        default:
+             break;
+        }
+
+        /* lastly. generate the instrumentation */
+        if (use_reg)
+        {
+            /* takes up one register */         
+            tcg_out_qtrace_instrument_reg_setup(s, icontext, currreg++, offset); 
+        } else {
+            /* this one goes onto the stack */
+            stack_offset[stk_paramcount++] = offset;
+        }
+    }
+
+    /* materialize what is on the stack */
+    for(idx = stk_paramcount-1; idx >= 0; --idx)
+    {
+        tcg_out_qtrace_instrument_stk_setup(s, icontext, stack_offset[idx]); 
+    } 
+
+    /* lastly, make the call */
+    uintptr_t ifun = icontext->ifun;
+    if (!ifun) QTRACE_ERROR("icontext ifun is NULL\n"); 
+    assert(ifun);
+    tcg_out_calli(s, (uintptr_t)ifun);
+
+    /* need to fix up stack */
+    if (paramcount > regcount) tcg_out_addi(s, TCG_REG_ESP, 8*(paramcount-regcount));
+}
+
+
+
+static inline bool tcg_out_qtrace_instrument(TCGContext *s, 
+                                             InstrumentContext *ictx, 
+                                             unsigned select)
+{
+    bool instrumented = false;
+    while(ictx) {
+        if (ictx->ipoint == select) 
+        {
+            tcg_out_qtrace_instrument_setup(s, ictx);
+            instrumented = true;
+        }
+        ictx = ictx->next;
+   }
+   return instrumented;
+}
+
+static inline void tcg_qtrace_patch_to_instrument(TCGContext *s, uint8_t *iptr, int index)
+{
+    /* patch into a call */
+    unsigned offset = iptr - (uint8_t*)s->qtrace_next_offset[index] - 4;
+    *(uint32_t*)(s->qtrace_next_offset[index]) = offset; 
+    *(uint8_t*)((intptr_t)(s->qtrace_next_offset[index])-1) = OPC_CALL_Jz;
+
+    /* jump back from the preinst instrumentation code */
+    tcg_out8(s, OPC_RET);
+}
+
 static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
                               const TCGArg *args, const int *const_args)
 {
@@ -1609,18 +2100,94 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
         case glue(glue(INDEX_op_, x), _i32)
 #endif
 
+#define PREINST_INDEX(x)    (0+x*2)
+#define PSTINST_INDEX(x)    (1+x*2)
+#define GET_TBNUM(x)        (DISAS_TB_JUMP & (intptr_t)(x))
+
+    InstrumentContext *ictx = NULL;
+    uint8_t *preinst_code_ptr = NULL, *pstinst_code_ptr = NULL;
+    unsigned rmsize = 0, offset = 0, memop = 0;
+    uint8_t preinst = false;
+    uint8_t pstinst = false;
+    int index;
+    int tb_num = 0;
     switch(opc) {
+    case INDEX_op_qtrace_instrumentation:
+         ictx = (InstrumentContext*)args[0];
+         /* generate the preinst instrumentation */
+         preinst_code_ptr = s->code_ptr;
+         preinst = tcg_out_qtrace_instrument(s, ictx, QTRACE_IPOINT_BEFORE); 
+         /* preinst instrumentation generate. now patches the 
+            INDEX_op_exit_tb and INDEX_op_goto_tb */
+         for(index = 0; index < 4; index = index + 2)
+         {
+            if (preinst && s->qtrace_next_offset[index])
+                tcg_qtrace_patch_to_instrument(s, preinst_code_ptr, index);                
+         }
+
+         /* generate the preinst instrumentation */
+         pstinst_code_ptr = s->code_ptr;
+         pstinst = tcg_out_qtrace_instrument(s, ictx, QTRACE_IPOINT_AFTER); 
+         /* preinst instrumentation generate. now patches the 
+            INDEX_op_exit_tb and INDEX_op_goto_tb */
+         for(index = 1; index < 4; index = index + 2)
+         {
+            if (pstinst && s->qtrace_next_offset[index])
+                tcg_qtrace_patch_to_instrument(s, pstinst_code_ptr, index);                
+         }
+         break;
+    case INDEX_op_qtrace_shadow_register:
+         /* shadow the register */
+         rmsize = (unsigned) args[0];
+         offset = (unsigned) args[1];
+         memop  = log2(rmsize)-3;
+         tcg_out_qemu_ld_direct(s, TCG_REG_L0, TCG_REG_L0, TCG_AREG0, 
+                                offsetof(CPUArchState, shadowcpu_offset), 
+                                0, MO_Q);
+         tgen_arithr(s, ARITH_ADD + P_REXW, TCG_REG_L0, TCG_AREG0);
+         tcg_out_qemu_ld_direct(s, TCG_REG_L1, TCG_REG_L1, TCG_AREG0, offset, 0, memop);
+         tcg_out_qemu_st_direct(s, TCG_REG_L1, TCG_REG_L1, TCG_REG_L0, offset, 0, memop);
+         break;
     case INDEX_op_exit_tb:
-        tcg_out_movi(s, TCG_TYPE_PTR, TCG_REG_EAX, args[0]);
-        tcg_out_jmp(s, (uintptr_t)tb_ret_addr);
-        break;
+         tb_num = (GET_TBNUM(args[0]));
+         /* preinst instrumentation jump. only generate the jump if
+            it has not been generated by the INDEX_op_goto_tb preceeding INDEX_op_exit_tb*/
+         if (!s->qtrace_next_offset[PREINST_INDEX(tb_num)])
+         {
+            tcg_out8(s, OPC_JMP_long); /* jmp im */
+            s->qtrace_next_offset[PREINST_INDEX(tb_num)] = (intptr_t) s->code_ptr; 
+            tcg_out32(s, 0);
+         }
+
+         /* pstinst instrumentation jump. only generate the jump if
+            it has not been generated by the INDEX_op_goto_tb preceeding INDEX_op_exit_tb*/
+         if (!s->qtrace_next_offset[PSTINST_INDEX(tb_num)])
+         {
+            tcg_out8(s, OPC_JMP_long); /* jmp im */
+            s->qtrace_next_offset[PSTINST_INDEX(tb_num)] = (intptr_t) s->code_ptr; 
+            tcg_out32(s, 0);
+         }
+
+         tcg_out_movi(s, TCG_TYPE_PTR, TCG_REG_EAX, args[0]);
+         tcg_out_jmp(s, (uintptr_t)tb_ret_addr);
+         break;
     case INDEX_op_goto_tb:
+         /* preinst instrumentation jump */
+         tcg_out8(s, OPC_JMP_long); /* jmp im */
+         s->qtrace_next_offset[PREINST_INDEX(args[0])] = (intptr_t) s->code_ptr; 
+         tcg_out32(s, 0);
+         /* postinst instrumentation jump */
+         tcg_out8(s, OPC_JMP_long); /* jmp im */
+         s->qtrace_next_offset[PSTINST_INDEX(args[0])] = (intptr_t) s->code_ptr; 
+         tcg_out32(s, 0);
+
         if (s->tb_jmp_offset) {
             /* direct jump method */
             tcg_out8(s, OPC_JMP_long); /* jmp im */
             s->tb_jmp_offset[args[0]] = s->code_ptr - s->code_buf;
             tcg_out32(s, 0);
         } else {
+            printf("FIX ME - in INDEX_op_goto_tb\n");
             /* indirect jump method */
             tcg_out_modrm_offset(s, OPC_GRP5, EXT5_JMPN_Ev, -1,
                                  (intptr_t)(s->tb_next + args[0]));
@@ -1935,6 +2502,9 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
     }
 
 #undef OP_32_64
+#undef PREINST_INDEX
+#undef PSTINST_INDEX
+#undef GET_TBNUM
 }
 
 static const TCGTargetOpDef x86_op_defs[] = {
@@ -2274,3 +2844,6 @@ void tcg_register_jit(void *buf, size_t buf_size)
     tcg_register_jit_int(buf, buf_size, &debug_frame, sizeof(debug_frame));
 }
 #endif
+
+
+

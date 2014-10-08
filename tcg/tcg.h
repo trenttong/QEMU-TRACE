@@ -26,8 +26,8 @@
 #define TCG_H
 
 #include "qemu-common.h"
-
 #include "tcg-target.h"
+#include "qtrace-common.h"
 
 /* Default target word size to pointer size.  */
 #ifndef TCG_TARGET_REG_BITS
@@ -162,7 +162,7 @@ typedef struct TCGPool {
 
 #define TCG_POOL_CHUNK_SIZE 32768
 
-#define TCG_MAX_LABELS 512
+#define TCG_MAX_LABELS 512 
 
 #define TCG_MAX_TEMPS 512
 
@@ -273,16 +273,16 @@ typedef tcg_target_ulong TCGArg;
 
 typedef struct
 {
-    int i32;
+    long int i32;
 } TCGv_i32;
 
 typedef struct
 {
-    int i64;
+    long int i64;
 } TCGv_i64;
 
 typedef struct {
-    int iptr;
+    long int iptr;
 } TCGv_ptr;
 
 #define MAKE_TCGV_I32(i) __extension__                  \
@@ -301,8 +301,12 @@ typedef struct {
 
 #else /* !DEBUG_TCGV */
 
-typedef int TCGv_i32;
-typedef int TCGv_i64;
+/* FIX-ME-XIN */
+// typedef int TCGv_i32;
+// typedef int TCGv_i64;
+
+typedef long int TCGv_i32;
+typedef long int TCGv_i64;
 #if TCG_TARGET_REG_BITS == 32
 #define TCGv_ptr TCGv_i32
 #else
@@ -458,6 +462,9 @@ struct TCGContext {
     uintptr_t *tb_next;
     uint16_t *tb_next_offset;
     uint16_t *tb_jmp_offset; /* != NULL if USE_DIRECT_JUMP */
+
+    /* qtrace */
+    uintptr_t *qtrace_next_offset;
 
     /* liveness analysis */
     uint16_t *op_dead_args; /* for each operation, each bit tells if the
@@ -766,6 +773,7 @@ TCGv_i64 tcg_const_local_i64(int64_t val);
 #endif
 
 void tcg_register_jit(void *buf, size_t buf_size);
+
 
 /*
  * Memory helpers that will be used by TCG generated code.

@@ -1922,6 +1922,7 @@ X86CPU *cpu_x86_create(const char *cpu_model, DeviceState *icc_bridge,
     features = model_pieces[1];
 
     cpu = X86_CPU(object_new(TYPE_X86_CPU));
+
 #ifndef CONFIG_USER_ONLY
     if (icc_bridge == NULL) {
         error_setg(&error, "Invalid icc-bridge value");
@@ -2695,6 +2696,11 @@ static void x86_cpu_initfn(Object *obj)
         cpu_set_debug_excp_handler(breakpoint_handler);
 #endif
     }
+
+    /* qtrace - every cpu keeps a shadow cpu */
+    env->shadowcpu = g_malloc(sizeof(CPUX86State));
+    env->shadowcpu_offset = (intptr_t)env->shadowcpu - (intptr_t)env;
+    memcpy(env->shadowcpu, env, sizeof(CPUX86State));
 }
 
 static int64_t x86_cpu_get_arch_id(CPUState *cs)

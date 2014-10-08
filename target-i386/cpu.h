@@ -21,6 +21,7 @@
 
 #include "config.h"
 #include "qemu-common.h"
+#include "qtrace-target.h"
 
 #ifdef TARGET_X86_64
 #define TARGET_LONG_BITS 64
@@ -47,15 +48,6 @@
 #include "exec/cpu-defs.h"
 
 #include "fpu/softfloat.h"
-
-#define R_EAX 0
-#define R_ECX 1
-#define R_EDX 2
-#define R_EBX 3
-#define R_ESP 4
-#define R_EBP 5
-#define R_ESI 6
-#define R_EDI 7
 
 #define R_AL 0
 #define R_CL 1
@@ -602,6 +594,8 @@ typedef uint32_t FeatureWordArray[FEATURE_WORDS];
 #define CPU_INTERRUPT_SIPI      CPU_INTERRUPT_TGT_INT_2
 #define CPU_INTERRUPT_TPR       CPU_INTERRUPT_TGT_INT_3
 
+#include "qtrace.h"
+
 
 typedef enum {
     CC_OP_DYNAMIC, /* must use dynamic code to get cc_op */
@@ -744,7 +738,6 @@ typedef struct {
 #define MAX_FIXED_COUNTERS 3
 #define MAX_GP_COUNTERS    (MSR_IA32_PERF_STATUS - MSR_P6_EVNTSEL0)
 
-#define NB_MMU_MODES 3
 
 typedef enum TPRAccess {
     TPR_ACCESS_READ,
@@ -916,6 +909,14 @@ typedef struct CPUX86State {
     uint64_t xcr0;
 
     TPRAccess tpr_access_type;
+
+    /* QTRACE - register shadowing */
+    struct CPUX86State *shadowcpu;
+    uint64_t shadowcpu_offset;
+
+    /* QTRACE - memory shadowing */
+    CPUFetchStoreShadow fetch_shadow;
+    CPUFetchStoreShadow store_shadow; 
 } CPUX86State;
 
 #include "cpu-qom.h"

@@ -29,6 +29,8 @@
 #include <sys/time.h>
 #include <zlib.h>
 #include "qemu/bitmap.h"
+#include "qemu-adebug.h"
+#include "qtrace.h"
 
 /* Needed early for CONFIG_BSD etc. */
 #include "config-host.h"
@@ -48,6 +50,7 @@
 #include <dirent.h>
 #include <netdb.h>
 #include <sys/select.h>
+#include <sys/shm.h>
 
 #ifdef CONFIG_BSD
 #include <sys/stat.h>
@@ -236,6 +239,9 @@ bool boot_strict;
 uint8_t *boot_splash_filedata;
 size_t boot_splash_filedata_size;
 uint8_t qemu_extra_params_fw[2];
+
+/* asynchrounous debug channel for QTRACE */
+DebugChannel *channel;
 
 typedef struct FWBootEntry FWBootEntry;
 
@@ -1451,6 +1457,25 @@ static void configure_msg(QemuOpts *opts)
 {
     enable_timestamp_msg = qemu_opt_get_bool(opts, "timestamp", true);
 }
+
+
+/***********************************************************/
+/* qemu asynchrounous dump tool */
+static void initialize_adebug(void)
+{
+   /* allocate a piece of shared memory */
+   int shared_id = shmget(SHARED_MEM_KEY, // a shared key.
+                          sizeof(DebugChannel), // size of debug channel.
+                          IPC_CREAT |     // Create the segment if it doesn't exist.
+                          S_IRUSR   |     // Owner read permission.
+                          S_IWUSR);       // Owner write permission.
+
+   channel = (DebugChannel*)shmat(shared_id, NULL, 0);
+   assert(channel);
+   // printf("create channel 0x%lx with key %d\n", (long unsigned int)channel, SHARED_MEM_KEY);
+}
+
+static void adebug_free(void ) {  shmdt(channel);  }
 
 /***********************************************************/
 /* USB devices */
@@ -2994,6 +3019,10 @@ int main(int argc, char **argv, char **envp)
                     drive_add(IF_DEFAULT, 0, optarg, buf);
                     break;
                 }
+            case QEMU_OPTION_instrument:
+                /* QTRACE module */
+                qtrace_instrument_setup(optarg);
+                break;
             case QEMU_OPTION_hdb:
             case QEMU_OPTION_hdc:
             case QEMU_OPTION_hdd:
@@ -4369,10 +4398,13 @@ int main(int argc, char **argv, char **envp)
 
     os_setup_post();
 
+    initialize_adebug();
+
     main_loop();
     bdrv_close_all();
     pause_all_vcpus();
     res_free();
+    adebug_free();
 #ifdef CONFIG_TPM
     tpm_cleanup();
 #endif

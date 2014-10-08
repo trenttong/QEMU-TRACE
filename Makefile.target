@@ -111,6 +111,7 @@ endif #CONFIG_BSD_USER
 ifdef CONFIG_SOFTMMU
 obj-y += arch_init.o cpus.o monitor.o gdbstub.o balloon.o ioport.o
 obj-y += qtest.o
+obj-y += qtrace.o
 obj-y += hw/
 obj-$(CONFIG_FDT) += device_tree.o
 obj-$(CONFIG_KVM) += kvm-all.o
@@ -150,6 +151,8 @@ all-obj-y += $(addprefix ../, $(common-obj-y))
 ifndef CONFIG_HAIKU
 LIBS+=-lm
 endif
+
+LIBS+=-ldl
 
 ifdef QEMU_PROGW
 # The linker builds a windows executable. Make also a console executable.

@@ -202,6 +202,9 @@ DEF(qemu_ld_i64, 2, 2, 2, IMPL_NEW_LDST | TCG_OPF_64BIT)
 DEF(qemu_st_i64, 0, 4, 2, IMPL_NEW_LDST | TCG_OPF_64BIT)
 #endif
 
+DEF(qtrace_instrumentation, 0, 0, 1, IMPL_NEW_LDST)
+DEF(qtrace_shadow_register, 0, 0, 2, IMPL_NEW_LDST)
+
 #undef IMPL_NEW_LDST
 
 #define IMPL_OLD_LDST \
@@ -262,7 +265,6 @@ DEF(qemu_st64, 0, 4, 1, IMPL_OLD_LDST | TCG_OPF_64BIT)
 #endif
 
 #else /* TCG_TARGET_REG_BITS == 32 */
-
 DEF(qemu_ld8u, 1, 1, 1, IMPL_OLD_LDST | TCG_OPF_64BIT)
 DEF(qemu_ld8s, 1, 1, 1, IMPL_OLD_LDST | TCG_OPF_64BIT)
 DEF(qemu_ld16u, 1, 1, 1, IMPL_OLD_LDST | TCG_OPF_64BIT)

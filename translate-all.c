@@ -154,6 +154,15 @@ int cpu_gen_code(CPUArchState *env, TranslationBlock *tb, int *gen_code_size_ptr
                        exceptions */
     ti = profile_getclock();
 #endif
+    /* free all the instrumentation context. start anew */
+    qtrace_free_all_icontexts();
+
+#if 0 
+    static int count = 0;
+    if (count++)
+    printf("%d gene blocks\n", count);
+#endif
+
     tcg_func_start(s);
 
     gen_intermediate_code(env, tb);
@@ -163,6 +172,11 @@ int cpu_gen_code(CPUArchState *env, TranslationBlock *tb, int *gen_code_size_ptr
     tb->tb_next_offset[0] = 0xffff;
     tb->tb_next_offset[1] = 0xffff;
     s->tb_next_offset = tb->tb_next_offset;
+
+    /* qtrace */
+    tb->qtrace_next_offset[0] = 0;
+    tb->qtrace_next_offset[1] = 0;
+    s->qtrace_next_offset = tb->qtrace_next_offset;
 #ifdef USE_DIRECT_JUMP
     s->tb_jmp_offset = tb->tb_jmp_offset;
     s->tb_next = NULL;
@@ -211,6 +225,8 @@ static int cpu_restore_state_from_tb(TranslationBlock *tb, CPUArchState *env,
     ti = profile_getclock();
 #endif
     tcg_func_start(s);
+
+    qtrace_free_all_icontexts();
 
     gen_intermediate_code_pc(env, tb);
 
@@ -966,6 +982,7 @@ TranslationBlock *tb_gen_code(CPUArchState *env,
     tb->flags = flags;
     tb->cflags = cflags;
     cpu_gen_code(env, tb, &code_gen_size);
+    tb->tc_end_ptr = code_gen_size + tb->tc_ptr;
     tcg_ctx.code_gen_ptr = (void *)(((uintptr_t)tcg_ctx.code_gen_ptr +
             code_gen_size + CODE_GEN_ALIGN - 1) & ~(CODE_GEN_ALIGN - 1));
 
