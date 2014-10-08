@@ -839,7 +839,7 @@ static inline void gen_op_addq_A0_reg_sN(int shift, int reg)
 }
 #endif
 
-static inline void gen_op_lds_T0_A0(int idx, DisasContext *s)
+static inline void gen_op_lds_T0_A0(DisasContext *s, int idx)
 {
     unsigned memfext = s->instrument_memory;
     int mem_index = (idx >> 2) - 1;
@@ -858,7 +858,7 @@ static inline void gen_op_lds_T0_A0(int idx, DisasContext *s)
     }
 }
 
-static inline void gen_op_ld_v(int idx, TCGv t0, TCGv a0, DisasContext *s)
+static inline void gen_op_ld_v(DisasContext *s, int idx, TCGv t0, TCGv a0)
 {
     unsigned memfext = s->instrument_memory;
     int mem_index = (idx >> 2) - 1;
@@ -884,22 +884,22 @@ static inline void gen_op_ld_v(int idx, TCGv t0, TCGv a0, DisasContext *s)
 }
 
 /* XXX: always use ldu or lds */
-static inline void gen_op_ld_T0_A0(int idx, DisasContext *s)
+static inline void gen_op_ld_T0_A0(DisasContext *s, int idx)
 {
-    gen_op_ld_v(idx, cpu_T[0], cpu_A0, s);
+    gen_op_ld_v(s, idx, cpu_T[0], cpu_A0);
 }
 
-static inline void gen_op_ldu_T0_A0(int idx, DisasContext *s)
+static inline void gen_op_ldu_T0_A0(DisasContext *s, int idx)
 {
-    gen_op_ld_v(idx, cpu_T[0], cpu_A0, s);
+    gen_op_ld_v(s, idx, cpu_T[0], cpu_A0);
 }
 
-static inline void gen_op_ld_T1_A0(int idx, DisasContext *s)
+static inline void gen_op_ld_T1_A0(DisasContext *s, int idx)
 {
-    gen_op_ld_v(idx, cpu_T[1], cpu_A0, s);
+    gen_op_ld_v(s, idx, cpu_T[1], cpu_A0);
 }
 
-static inline void gen_op_st_v(int idx, TCGv t0, TCGv a0, DisasContext *s)
+static inline void gen_op_st_v(DisasContext *s, int idx, TCGv t0, TCGv a0)
 {
     unsigned memfext = s->instrument_memory;
     int mem_index = (idx >> 2) - 1;
@@ -924,14 +924,14 @@ static inline void gen_op_st_v(int idx, TCGv t0, TCGv a0, DisasContext *s)
     }
 }
 
-static inline void gen_op_st_T0_A0(int idx, DisasContext *s)
+static inline void gen_op_st_T0_A0(DisasContext *s, int idx)
 {
-    gen_op_st_v(idx, cpu_T[0], cpu_A0, s);
+    gen_op_st_v(s, idx, cpu_T[0], cpu_A0);
 }
 
-static inline void gen_op_st_T1_A0(int idx, DisasContext *s)
+static inline void gen_op_st_T1_A0(DisasContext *s, int idx)
 {
-    gen_op_st_v(idx, cpu_T[1], cpu_A0, s);
+    gen_op_st_v(s, idx, cpu_T[1], cpu_A0);
 }
 
 static inline void gen_jmp_im(target_ulong pc)
@@ -1132,7 +1132,7 @@ static inline void gen_movs(DisasContext *s, int ot)
     ///QTRACE_CLIENT_MODULE(s);
 
     gen_string_movl_A0_ESI(s);
-    gen_op_ld_T0_A0(ot + s->mem_index, s);
+    gen_op_ld_T0_A0(s, ot + s->mem_index);
     gen_string_movl_A0_EDI(s);
 
     /* QTRACE - store to memory */
@@ -1140,7 +1140,7 @@ static inline void gen_movs(DisasContext *s, int ot)
     QTRACE_SUB_INST_TYPE_FLAG(s, QTRACE_IS_FETCH);
     QTRACE_CLIENT_MODULE(s);
     
-    gen_op_st_T0_A0(ot + s->mem_index, s);
+    gen_op_st_T0_A0(s, ot + s->mem_index);
 
     gen_op_movl_T0_Dshift(ot);
     gen_op_add_reg_T0(s->aflag, R_ESI);
@@ -1566,7 +1566,7 @@ static inline void gen_stos(DisasContext *s, int ot)
 {
     gen_op_mov_TN_reg(OT_LONG, 0, R_EAX);
     gen_string_movl_A0_EDI(s);
-    gen_op_st_T0_A0(ot + s->mem_index, s);
+    gen_op_st_T0_A0(s, ot + s->mem_index);
     gen_op_movl_T0_Dshift(ot);
     gen_op_add_reg_T0(s->aflag, R_EDI);
 }
@@ -1574,7 +1574,7 @@ static inline void gen_stos(DisasContext *s, int ot)
 static inline void gen_lods(DisasContext *s, int ot)
 {
     gen_string_movl_A0_ESI(s);
-    gen_op_ld_T0_A0(ot + s->mem_index, s);
+    gen_op_ld_T0_A0(s, ot + s->mem_index);
     gen_op_mov_reg_T0(ot, R_EAX);
     gen_op_movl_T0_Dshift(ot);
     gen_op_add_reg_T0(s->aflag, R_ESI);
@@ -1583,7 +1583,7 @@ static inline void gen_lods(DisasContext *s, int ot)
 static inline void gen_scas(DisasContext *s, int ot)
 {
     gen_string_movl_A0_EDI(s);
-    gen_op_ld_T1_A0(ot + s->mem_index, s);
+    gen_op_ld_T1_A0(s, ot + s->mem_index);
     gen_op(s, OP_CMPL, ot, R_EAX);
     gen_op_movl_T0_Dshift(ot);
     gen_op_add_reg_T0(s->aflag, R_EDI);
@@ -1592,7 +1592,7 @@ static inline void gen_scas(DisasContext *s, int ot)
 static inline void gen_cmps(DisasContext *s, int ot)
 {
     gen_string_movl_A0_EDI(s);
-    gen_op_ld_T1_A0(ot + s->mem_index, s);
+    gen_op_ld_T1_A0(s, ot + s->mem_index);
     gen_string_movl_A0_ESI(s);
     gen_op(s, OP_CMPL, ot, OR_TMP0);
     gen_op_movl_T0_Dshift(ot);
@@ -1608,12 +1608,12 @@ static inline void gen_ins(DisasContext *s, int ot)
     /* Note: we must do this dummy write first to be restartable in
        case of page fault. */
     gen_op_movl_T0_0();
-    gen_op_st_T0_A0(ot + s->mem_index, s);
+    gen_op_st_T0_A0(s, ot + s->mem_index);
     gen_op_mov_TN_reg(OT_WORD, 1, R_EDX);
     tcg_gen_trunc_tl_i32(cpu_tmp2_i32, cpu_T[1]);
     tcg_gen_andi_i32(cpu_tmp2_i32, cpu_tmp2_i32, 0xffff);
     gen_helper_in_func(ot, cpu_T[0], cpu_tmp2_i32);
-    gen_op_st_T0_A0(ot + s->mem_index, s);
+    gen_op_st_T0_A0(s, ot + s->mem_index);
     gen_op_movl_T0_Dshift(ot);
     gen_op_add_reg_T0(s->aflag, R_EDI);
     if (use_icount)
@@ -1625,7 +1625,7 @@ static inline void gen_outs(DisasContext *s, int ot)
     if (use_icount)
         gen_io_start();
     gen_string_movl_A0_ESI(s);
-    gen_op_ld_T0_A0(ot + s->mem_index, s);
+    gen_op_ld_T0_A0(s, ot + s->mem_index);
 
     gen_op_mov_TN_reg(OT_WORD, 1, R_EDX);
     tcg_gen_trunc_tl_i32(cpu_tmp2_i32, cpu_T[1]);
@@ -1745,7 +1745,7 @@ static void gen_op(DisasContext *s1, int op, int ot, int d)
     if (d != OR_TMP0) {
         gen_op_mov_TN_reg(ot, 0, d);
     } else {
-        gen_op_ld_T0_A0(ot + s1->mem_index, s1);
+        gen_op_ld_T0_A0(s1, ot + s1->mem_index);
     }
     switch(op) {
     case OP_ADCL:
@@ -1755,7 +1755,7 @@ static void gen_op(DisasContext *s1, int op, int ot, int d)
         if (d != OR_TMP0)
             gen_op_mov_reg_T0(ot, d);
         else
-            gen_op_st_T0_A0(ot + s1->mem_index, s1);
+            gen_op_st_T0_A0(s1, ot + s1->mem_index);
         gen_op_update3_cc(cpu_tmp4);
         set_cc_op(s1, CC_OP_ADCB + ot);
         break;
@@ -1766,7 +1766,7 @@ static void gen_op(DisasContext *s1, int op, int ot, int d)
         if (d != OR_TMP0)
             gen_op_mov_reg_T0(ot, d);
         else
-            gen_op_st_T0_A0(ot + s1->mem_index, s1);
+            gen_op_st_T0_A0(s1, ot + s1->mem_index);
         gen_op_update3_cc(cpu_tmp4);
         set_cc_op(s1, CC_OP_SBBB + ot);
         break;
@@ -1775,7 +1775,7 @@ static void gen_op(DisasContext *s1, int op, int ot, int d)
         if (d != OR_TMP0)
             gen_op_mov_reg_T0(ot, d);
         else
-            gen_op_st_T0_A0(ot + s1->mem_index, s1);
+            gen_op_st_T0_A0(s1, ot + s1->mem_index);
         gen_op_update2_cc();
         set_cc_op(s1, CC_OP_ADDB + ot);
         break;
@@ -1785,7 +1785,7 @@ static void gen_op(DisasContext *s1, int op, int ot, int d)
         if (d != OR_TMP0)
             gen_op_mov_reg_T0(ot, d);
         else
-            gen_op_st_T0_A0(ot + s1->mem_index, s1);
+            gen_op_st_T0_A0(s1, ot + s1->mem_index);
         gen_op_update2_cc();
         set_cc_op(s1, CC_OP_SUBB + ot);
         break;
@@ -1795,7 +1795,7 @@ static void gen_op(DisasContext *s1, int op, int ot, int d)
         if (d != OR_TMP0)
             gen_op_mov_reg_T0(ot, d);
         else
-            gen_op_st_T0_A0(ot + s1->mem_index, s1);
+            gen_op_st_T0_A0(s1, ot + s1->mem_index);
         gen_op_update1_cc();
         set_cc_op(s1, CC_OP_LOGICB + ot);
         break;
@@ -1804,7 +1804,7 @@ static void gen_op(DisasContext *s1, int op, int ot, int d)
         if (d != OR_TMP0)
             gen_op_mov_reg_T0(ot, d);
         else
-            gen_op_st_T0_A0(ot + s1->mem_index, s1);
+            gen_op_st_T0_A0(s1, ot + s1->mem_index);
         gen_op_update1_cc();
         set_cc_op(s1, CC_OP_LOGICB + ot);
         break;
@@ -1813,7 +1813,7 @@ static void gen_op(DisasContext *s1, int op, int ot, int d)
         if (d != OR_TMP0)
             gen_op_mov_reg_T0(ot, d);
         else
-            gen_op_st_T0_A0(ot + s1->mem_index, s1);
+            gen_op_st_T0_A0(s1, ot + s1->mem_index);
         gen_op_update1_cc();
         set_cc_op(s1, CC_OP_LOGICB + ot);
         break;
@@ -1832,7 +1832,7 @@ static void gen_inc(DisasContext *s1, int ot, int d, int c)
     if (d != OR_TMP0)
         gen_op_mov_TN_reg(ot, 0, d);
     else
-        gen_op_ld_T0_A0(ot + s1->mem_index, s1);
+        gen_op_ld_T0_A0(s1, ot + s1->mem_index);
     gen_compute_eflags_c(s1, cpu_cc_src);
     if (c > 0) {
         tcg_gen_addi_tl(cpu_T[0], cpu_T[0], 1);
@@ -1844,7 +1844,7 @@ static void gen_inc(DisasContext *s1, int ot, int d, int c)
     if (d != OR_TMP0)
         gen_op_mov_reg_T0(ot, d);
     else
-        gen_op_st_T0_A0(ot + s1->mem_index, s1);
+        gen_op_st_T0_A0(s1, ot + s1->mem_index);
     tcg_gen_mov_tl(cpu_cc_dst, cpu_T[0]);
 }
 
@@ -1900,7 +1900,7 @@ static void gen_shift_rm_T1(DisasContext *s, int ot, int op1,
 
     /* load */
     if (op1 == OR_TMP0) {
-        gen_op_ld_T0_A0(ot + s->mem_index, s);
+        gen_op_ld_T0_A0(s, ot + s->mem_index);
     } else {
         gen_op_mov_TN_reg(ot, 0, op1);
     }
@@ -1925,7 +1925,7 @@ static void gen_shift_rm_T1(DisasContext *s, int ot, int op1,
 
     /* store */
     if (op1 == OR_TMP0) {
-        gen_op_st_T0_A0(ot + s->mem_index, s);
+        gen_op_st_T0_A0(s, ot + s->mem_index);
     } else {
         gen_op_mov_reg_T0(ot, op1);
     }
@@ -1940,7 +1940,7 @@ static void gen_shift_rm_im(DisasContext *s, int ot, int op1, int op2,
 
     /* load */
     if (op1 == OR_TMP0)
-        gen_op_ld_T0_A0(ot + s->mem_index, s);
+        gen_op_ld_T0_A0(s, ot + s->mem_index);
     else
         gen_op_mov_TN_reg(ot, 0, op1);
 
@@ -1964,7 +1964,7 @@ static void gen_shift_rm_im(DisasContext *s, int ot, int op1, int op2,
 
     /* store */
     if (op1 == OR_TMP0)
-        gen_op_st_T0_A0(ot + s->mem_index, s);
+        gen_op_st_T0_A0(s, ot + s->mem_index);
     else
         gen_op_mov_reg_T0(ot, op1);
         
@@ -1991,7 +1991,7 @@ static void gen_rot_rm_T1(DisasContext *s, int ot, int op1, int is_right)
 
     /* load */
     if (op1 == OR_TMP0) {
-        gen_op_ld_T0_A0(ot + s->mem_index, s);
+        gen_op_ld_T0_A0(s, ot + s->mem_index);
     } else {
         gen_op_mov_TN_reg(ot, 0, op1);
     }
@@ -2032,7 +2032,7 @@ static void gen_rot_rm_T1(DisasContext *s, int ot, int op1, int is_right)
 
     /* store */
     if (op1 == OR_TMP0) {
-        gen_op_st_T0_A0(ot + s->mem_index, s);
+        gen_op_st_T0_A0(s, ot + s->mem_index);
     } else {
         gen_op_mov_reg_T0(ot, op1);
     }
@@ -2081,7 +2081,7 @@ static void gen_rot_rm_im(DisasContext *s, int ot, int op1, int op2,
 
     /* load */
     if (op1 == OR_TMP0) {
-        gen_op_ld_T0_A0(ot + s->mem_index, s);
+        gen_op_ld_T0_A0(s, ot + s->mem_index);
     } else {
         gen_op_mov_TN_reg(ot, 0, op1);
     }
@@ -2127,7 +2127,7 @@ static void gen_rot_rm_im(DisasContext *s, int ot, int op1, int op2,
 
     /* store */
     if (op1 == OR_TMP0) {
-        gen_op_st_T0_A0(ot + s->mem_index, s);
+        gen_op_st_T0_A0(s, ot + s->mem_index);
     } else {
         gen_op_mov_reg_T0(ot, op1);
     }
@@ -2163,7 +2163,7 @@ static void gen_rotc_rm_T1(DisasContext *s, int ot, int op1,
 
     /* load */
     if (op1 == OR_TMP0)
-        gen_op_ld_T0_A0(ot + s->mem_index, s);
+        gen_op_ld_T0_A0(s, ot + s->mem_index);
     else
         gen_op_mov_TN_reg(ot, 0, op1);
     
@@ -2204,7 +2204,7 @@ static void gen_rotc_rm_T1(DisasContext *s, int ot, int op1,
     }
     /* store */
     if (op1 == OR_TMP0)
-        gen_op_st_T0_A0(ot + s->mem_index, s);
+        gen_op_st_T0_A0(s, ot + s->mem_index);
     else
         gen_op_mov_reg_T0(ot, op1);
 }
@@ -2218,7 +2218,7 @@ static void gen_shiftd_rm_T1(DisasContext *s, int ot, int op1,
 
     /* load */
     if (op1 == OR_TMP0) {
-        gen_op_ld_T0_A0(ot + s->mem_index, s);
+        gen_op_ld_T0_A0(s, ot + s->mem_index);
     } else {
         gen_op_mov_TN_reg(ot, 0, op1);
     }
@@ -2286,7 +2286,7 @@ static void gen_shiftd_rm_T1(DisasContext *s, int ot, int op1,
 
     /* store */
     if (op1 == OR_TMP0) {
-        gen_op_st_T0_A0(ot + s->mem_index, s);
+        gen_op_st_T0_A0(s, ot + s->mem_index);
     } else {
         gen_op_mov_reg_T0(ot, op1);
     }
@@ -2636,9 +2636,9 @@ static void gen_ldst_modrm(CPUX86State *env, DisasContext *s, int modrm,
         if (is_store) {
             if (reg != OR_TMP0)
                 gen_op_mov_TN_reg(ot, 0, reg);
-            gen_op_st_T0_A0(ot + s->mem_index, s);
+            gen_op_st_T0_A0(s, ot + s->mem_index);
         } else {
-            gen_op_ld_T0_A0(ot + s->mem_index, s);
+            gen_op_ld_T0_A0(s, ot + s->mem_index);
             if (reg != OR_TMP0)
                 gen_op_mov_reg_T0(ot, reg);
         }
@@ -2839,10 +2839,10 @@ static void gen_push_T0(DisasContext *s)
         gen_op_movq_A0_reg(R_ESP);
         if (s->dflag) {
             gen_op_addq_A0_im(-8);
-            gen_op_st_T0_A0(OT_QUAD + s->mem_index, s);
+            gen_op_st_T0_A0(s, OT_QUAD + s->mem_index);
         } else {
             gen_op_addq_A0_im(-2);
-            gen_op_st_T0_A0(OT_WORD + s->mem_index, s);
+            gen_op_st_T0_A0(s, OT_WORD + s->mem_index);
         }
         gen_op_mov_reg_A0(2, R_ESP);
     } else
@@ -2863,7 +2863,7 @@ static void gen_push_T0(DisasContext *s)
             tcg_gen_mov_tl(cpu_T[1], cpu_A0);
             gen_op_addl_A0_seg(s, R_SS);
         }
-        gen_op_st_T0_A0(s->dflag + 1 + s->mem_index,s );
+        gen_op_st_T0_A0(s, s->dflag + 1 + s->mem_index);
         if (s->ss32 && !s->addseg)
             gen_op_mov_reg_A0(1, R_ESP);
         else
@@ -2880,10 +2880,10 @@ static void gen_push_T1(DisasContext *s)
         gen_op_movq_A0_reg(R_ESP);
         if (s->dflag) {
             gen_op_addq_A0_im(-8);
-            gen_op_st_T1_A0(OT_QUAD + s->mem_index, s);
+            gen_op_st_T1_A0(s, OT_QUAD + s->mem_index);
         } else {
             gen_op_addq_A0_im(-2);
-            gen_op_st_T0_A0(OT_WORD + s->mem_index, s);
+            gen_op_st_T0_A0(s, OT_WORD + s->mem_index);
         }
         gen_op_mov_reg_A0(2, R_ESP);
     } else
@@ -2902,7 +2902,7 @@ static void gen_push_T1(DisasContext *s)
             gen_op_andl_A0_ffff();
             gen_op_addl_A0_seg(s, R_SS);
         }
-        gen_op_st_T1_A0(s->dflag + 1 + s->mem_index, s);
+        gen_op_st_T1_A0(s, s->dflag + 1 + s->mem_index);
 
         if (s->ss32 && !s->addseg)
             gen_op_mov_reg_A0(1, R_ESP);
@@ -2917,7 +2917,7 @@ static void gen_pop_T0(DisasContext *s)
 #ifdef TARGET_X86_64
     if (CODE64(s)) {
         gen_op_movq_A0_reg(R_ESP);
-        gen_op_ld_T0_A0((s->dflag ? OT_QUAD : OT_WORD) + s->mem_index, s);
+        gen_op_ld_T0_A0(s, (s->dflag ? OT_QUAD : OT_WORD) + s->mem_index);
     } else
 #endif
     {
@@ -2929,7 +2929,7 @@ static void gen_pop_T0(DisasContext *s)
             gen_op_andl_A0_ffff();
             gen_op_addl_A0_seg(s, R_SS);
         }
-        gen_op_ld_T0_A0(s->dflag + 1 + s->mem_index, s);
+        gen_op_ld_T0_A0(s, s->dflag + 1 + s->mem_index);
     }
 }
 
@@ -2968,7 +2968,7 @@ static void gen_pusha(DisasContext *s)
         gen_op_addl_A0_seg(s, R_SS);
     for(i = 0;i < 8; i++) {
         gen_op_mov_TN_reg(OT_LONG, 0, 7 - i);
-        gen_op_st_T0_A0(OT_WORD + s->dflag + s->mem_index, s);
+        gen_op_st_T0_A0(s, OT_WORD + s->dflag + s->mem_index);
         gen_op_addl_A0_im(2 <<  s->dflag);
     }
     gen_op_mov_reg_T1(OT_WORD + s->ss32, R_ESP);
@@ -2988,7 +2988,7 @@ static void gen_popa(DisasContext *s)
     for(i = 0;i < 8; i++) {
         /* ESP is not reloaded */
         if (i != 3) {
-            gen_op_ld_T0_A0(OT_WORD + s->dflag + s->mem_index, s);
+            gen_op_ld_T0_A0(s, OT_WORD + s->dflag + s->mem_index);
             gen_op_mov_reg_T0(OT_WORD + s->dflag, 7 - i);
         }
         gen_op_addl_A0_im(2 <<  s->dflag);
@@ -3012,7 +3012,7 @@ static void gen_enter(DisasContext *s, int esp_addend, int level)
 
         /* push bp */
         gen_op_mov_TN_reg(OT_LONG, 0, R_EBP);
-        gen_op_st_T0_A0(ot + s->mem_index, s);
+        gen_op_st_T0_A0(s, ot + s->mem_index);
         if (level) {
             /* XXX: must save state */
             gen_helper_enter64_level(cpu_env, tcg_const_i32(level),
@@ -3037,7 +3037,7 @@ static void gen_enter(DisasContext *s, int esp_addend, int level)
             gen_op_addl_A0_seg(s, R_SS);
         /* push bp */
         gen_op_mov_TN_reg(OT_LONG, 0, R_EBP);
-        gen_op_st_T0_A0(ot + s->mem_index, s);
+        gen_op_st_T0_A0(s, ot + s->mem_index);
         if (level) {
             /* XXX: must save state */
             gen_helper_enter_level(cpu_env, tcg_const_i32(level),
@@ -3612,7 +3612,7 @@ static void gen_sse(CPUX86State *env, DisasContext *s, int b,
             } else {
                 tcg_gen_ld32u_tl(cpu_T[0], cpu_env, offsetof(CPUX86State,
                     xmm_regs[reg].XMM_L(0)));
-                gen_op_st_T0_A0(OT_LONG + s->mem_index, s);
+                gen_op_st_T0_A0(s, OT_LONG + s->mem_index);
             }
             break;
         case 0x6e: /* movd mm, ea */
@@ -3677,7 +3677,7 @@ static void gen_sse(CPUX86State *env, DisasContext *s, int b,
         case 0x210: /* movss xmm, ea */
             if (mod != 3) {
                 gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
-                gen_op_ld_T0_A0(OT_LONG + s->mem_index, s);
+                gen_op_ld_T0_A0(s, OT_LONG + s->mem_index);
                 tcg_gen_st32_tl(cpu_T[0], cpu_env, offsetof(CPUX86State,xmm_regs[reg].XMM_L(0)));
                 gen_op_movl_T0_0();
                 tcg_gen_st32_tl(cpu_T[0], cpu_env, offsetof(CPUX86State,xmm_regs[reg].XMM_L(1)));
@@ -3859,7 +3859,7 @@ static void gen_sse(CPUX86State *env, DisasContext *s, int b,
             if (mod != 3) {
                 gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
                 tcg_gen_ld32u_tl(cpu_T[0], cpu_env, offsetof(CPUX86State,xmm_regs[reg].XMM_L(0)));
-                gen_op_st_T0_A0(OT_LONG + s->mem_index, s);
+                gen_op_st_T0_A0(s, OT_LONG + s->mem_index);
             } else {
                 rm = (modrm & 7) | REX_B(s);
                 gen_op_movl(offsetof(CPUX86State,xmm_regs[rm].XMM_L(0)),
@@ -4033,7 +4033,7 @@ static void gen_sse(CPUX86State *env, DisasContext *s, int b,
                 if ((b >> 8) & 1) {
                     gen_ldq_env_A0(s->mem_index, offsetof(CPUX86State,xmm_t0.XMM_Q(0)));
                 } else {
-                    gen_op_ld_T0_A0(OT_LONG + s->mem_index, s);
+                    gen_op_ld_T0_A0(s, OT_LONG + s->mem_index);
                     tcg_gen_st32_tl(cpu_T[0], cpu_env, offsetof(CPUX86State,xmm_t0.XMM_L(0)));
                 }
                 op2_offset = offsetof(CPUX86State,xmm_t0);
@@ -4845,7 +4845,7 @@ static void gen_sse(CPUX86State *env, DisasContext *s, int b,
                     /* specific case for SSE single instructions */
                     if (b1 == 2) {
                         /* 32 bit access */
-                        gen_op_ld_T0_A0(OT_LONG + s->mem_index, s);
+                        gen_op_ld_T0_A0(s, OT_LONG + s->mem_index);
                         tcg_gen_st32_tl(cpu_T[0], cpu_env, offsetof(CPUX86State,xmm_t0.XMM_L(0)));
                     } else {
                         /* 64 bit access */
@@ -5162,7 +5162,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                 rm = (modrm & 7) | REX_B(s);
                 if (mod != 3) {
                     gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
-                    gen_op_ld_T1_A0(ot + s->mem_index, s);
+                    gen_op_ld_T1_A0(s, ot + s->mem_index);
                 } else if (op == OP_XORL && rm == reg) {
                     goto xor_zero;
                 } else {
@@ -5262,7 +5262,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             if (op == 0)
                 s->rip_offset = insn_const_size(ot);
             gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
-            gen_op_ld_T0_A0(ot + s->mem_index, s);
+            gen_op_ld_T0_A0(s, ot + s->mem_index);
         } else {
             gen_op_mov_TN_reg(ot, 0, rm);
         }
@@ -5282,7 +5282,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                 QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_STORE);
                 //QTRACE_CLIENT_MODULE(s);
       
-                gen_op_st_T0_A0(ot + s->mem_index, s);
+                gen_op_st_T0_A0(s, ot + s->mem_index);
             } else {
                 /* QTRACE - done parsing instruction property */
                 //QTRACE_CLIENT_MODULE(s);
@@ -5300,7 +5300,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                 QTRACE_SUB_INST_TYPE_FLAG(s, QTRACE_IS_FETCH);
                 //QTRACE_CLIENT_MODULE(s);
 
-                gen_op_st_T0_A0(ot + s->mem_index, s);
+                gen_op_st_T0_A0(s, ot + s->mem_index);
             } else {
                 gen_op_mov_reg_T0(ot, rm);
             }
@@ -5489,7 +5489,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         if (mod != 3) {
             gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
             if (op >= 2 && op != 3 && op != 5)
-                gen_op_ld_T0_A0(ot + s->mem_index, s);
+                gen_op_ld_T0_A0(s, ot + s->mem_index);
         } else {
             gen_op_mov_TN_reg(ot, 0, rm);
         }
@@ -5521,9 +5521,9 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             gen_eob(s);
             break;
         case 3: /* lcall Ev */
-            gen_op_ld_T1_A0(ot + s->mem_index, s);
+            gen_op_ld_T1_A0(s, ot + s->mem_index);
             gen_add_A0_im(s, 1 << (ot - OT_WORD + 1));
-            gen_op_ldu_T0_A0(OT_WORD + s->mem_index, s);
+            gen_op_ldu_T0_A0(s, OT_WORD + s->mem_index);
         do_lcall:
             if (s->pe && !s->vm86) {
                 gen_update_cc_op(s);
@@ -5556,9 +5556,9 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_JMP);
             ///QTRACE_CLIENT_MODULE(s);
 
-            gen_op_ld_T1_A0(ot + s->mem_index, s);
+            gen_op_ld_T1_A0(s, ot + s->mem_index);
             gen_add_A0_im(s, 1 << (ot - OT_WORD + 1));
-            gen_op_ldu_T0_A0(OT_WORD + s->mem_index, s);
+            gen_op_ldu_T0_A0(s, OT_WORD + s->mem_index);
         do_ljmp:
             if (s->pe && !s->vm86) {
                 gen_update_cc_op(s);
@@ -5721,9 +5721,9 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         } else {
             gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
             gen_op_mov_TN_reg(ot, 0, reg);
-            gen_op_ld_T1_A0(ot + s->mem_index, s);
+            gen_op_ld_T1_A0(s, ot + s->mem_index);
             gen_op_addl_T0_T1();
-            gen_op_st_T0_A0(ot + s->mem_index, s);
+            gen_op_st_T0_A0(s, ot + s->mem_index);
             gen_op_mov_reg_T1(ot, reg);
         }
         gen_op_update2_cc();
@@ -5753,7 +5753,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             } else {
                 gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
                 tcg_gen_mov_tl(a0, cpu_A0);
-                gen_op_ld_v(ot + s->mem_index, t0, a0, s);
+                gen_op_ld_v(s, ot + s->mem_index, t0, a0);
                 rm = 0; /* avoid warning */
             }
             label1 = gen_new_label();
@@ -5771,11 +5771,11 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                 /* perform no-op store cycle like physical cpu; must be
                    before changing accumulator to ensure idempotency if
                    the store faults and the instruction is restarted */
-                gen_op_st_v(ot + s->mem_index, t0, a0, s);
+                gen_op_st_v(s, ot + s->mem_index, t0, a0);
                 gen_op_mov_reg_v(ot, R_EAX, t0);
                 tcg_gen_br(label2);
                 gen_set_label(label1);
-                gen_op_st_v(ot + s->mem_index, t1, a0, s);
+                gen_op_st_v(s, ot + s->mem_index, t1, a0);
             }
             gen_set_label(label2);
             tcg_gen_mov_tl(cpu_cc_src, t0);
@@ -6004,7 +6004,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         val = insn_get(env, s, ot);
         gen_op_movl_T0_im(val);
         if (mod != 3) {
-            gen_op_st_T0_A0(ot + s->mem_index, s);
+            gen_op_st_T0_A0(s, ot + s->mem_index);
         }
         else
             gen_op_mov_reg_T0(ot, (modrm & 7) | REX_B(s));
@@ -6117,9 +6117,9 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             } else {
                 gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
                 if (b & 8) {
-                    gen_op_lds_T0_A0(ot + s->mem_index, s);
+                    gen_op_lds_T0_A0(s, ot + s->mem_index);
                 } else {
-                    gen_op_ldu_T0_A0(ot + s->mem_index, s);
+                    gen_op_ldu_T0_A0(s, ot + s->mem_index);
                 }
                 gen_op_mov_reg_T0(d_ot, reg);
             }
@@ -6184,7 +6184,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                 //QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_FETCH);
                 //QTRACE_CLIENT_MODULE(s);
 
-                gen_op_ld_T0_A0(ot + s->mem_index, s);
+                gen_op_ld_T0_A0(s, ot + s->mem_index);
                 gen_op_mov_reg_T0(ot, R_EAX);
             } else {
                 /* this is a store from memory */
@@ -6192,7 +6192,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                 ///QTRACE_CLIENT_MODULE(s);
 
                 gen_op_mov_TN_reg(ot, 0, R_EAX);
-                gen_op_st_T0_A0(ot + s->mem_index, s);
+                gen_op_st_T0_A0(s, ot + s->mem_index);
             }
         }
         break;
@@ -6222,7 +6222,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         //QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_FETCH);
         //QTRACE_CLIENT_MODULE(s);
 
-        gen_op_ldu_T0_A0(OT_BYTE + s->mem_index, s);
+        gen_op_ldu_T0_A0(s, OT_BYTE + s->mem_index);
         gen_op_mov_reg_T0(OT_BYTE, R_EAX);
         break;
     case 0xb0 ... 0xb7: /* mov R, Ib */
@@ -6285,8 +6285,8 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             //QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_STORE);
             //QTRACE_CLIENT_MODULE(s);
 
-            gen_op_ld_T1_A0(ot + s->mem_index, s);
-            gen_op_st_T0_A0(ot + s->mem_index, s);
+            gen_op_ld_T1_A0(s, ot + s->mem_index);
+            gen_op_st_T0_A0(s, ot + s->mem_index);
             if (!(prefixes & PREFIX_LOCK))
                 gen_helper_unlock();
             gen_op_mov_reg_T1(ot, reg);
@@ -6321,10 +6321,10 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         //QTRACE_CLIENT_MODULE(s);
 
         gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
-        gen_op_ld_T1_A0(ot + s->mem_index, s);
+        gen_op_ld_T1_A0(s, ot + s->mem_index);
         gen_add_A0_im(s, 1 << (ot - OT_WORD + 1));
         /* load the segment first to handle exceptions properly */
-        gen_op_ldu_T0_A0(OT_WORD + s->mem_index, s);
+        gen_op_ldu_T0_A0(s, OT_WORD + s->mem_index);
         gen_movl_seg_T0(s, op, pc_start - s->cs_base);
         /* then put the data */
         gen_op_mov_reg_T1(ot, reg);
@@ -6452,12 +6452,12 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
 
                     switch(op >> 4) {
                     case 0:
-                        gen_op_ld_T0_A0(OT_LONG + s->mem_index, s);
+                        gen_op_ld_T0_A0(s, OT_LONG + s->mem_index);
                         tcg_gen_trunc_tl_i32(cpu_tmp2_i32, cpu_T[0]);
                         gen_helper_flds_FT0(cpu_env, cpu_tmp2_i32);
                         break;
                     case 1:
-                        gen_op_ld_T0_A0(OT_LONG + s->mem_index, s);
+                        gen_op_ld_T0_A0(s, OT_LONG + s->mem_index);
                         tcg_gen_trunc_tl_i32(cpu_tmp2_i32, cpu_T[0]);
                         gen_helper_fildl_FT0(cpu_env, cpu_tmp2_i32);
                         break;
@@ -6468,7 +6468,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                         break;
                     case 3:
                     default:
-                        gen_op_lds_T0_A0(OT_WORD + s->mem_index, s);
+                        gen_op_lds_T0_A0(s, OT_WORD + s->mem_index);
                         tcg_gen_trunc_tl_i32(cpu_tmp2_i32, cpu_T[0]);
                         gen_helper_fildl_FT0(cpu_env, cpu_tmp2_i32);
                         break;
@@ -6494,12 +6494,12 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                     //QTRACE_CLIENT_MODULE(s);
                     switch(op >> 4) {
                     case 0:
-                        gen_op_ld_T0_A0(OT_LONG + s->mem_index, s);
+                        gen_op_ld_T0_A0(s, OT_LONG + s->mem_index);
                         tcg_gen_trunc_tl_i32(cpu_tmp2_i32, cpu_T[0]);
                         gen_helper_flds_ST0(cpu_env, cpu_tmp2_i32);
                         break;
                     case 1:
-                        gen_op_ld_T0_A0(OT_LONG + s->mem_index, s);
+                        gen_op_ld_T0_A0(s, OT_LONG + s->mem_index);
                         tcg_gen_trunc_tl_i32(cpu_tmp2_i32, cpu_T[0]);
                         gen_helper_fildl_ST0(cpu_env, cpu_tmp2_i32);
                         break;
@@ -6510,7 +6510,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                         break;
                     case 3:
                     default:
-                        gen_op_lds_T0_A0(OT_WORD + s->mem_index, s);
+                        gen_op_lds_T0_A0(s, OT_WORD + s->mem_index);
                         tcg_gen_trunc_tl_i32(cpu_tmp2_i32, cpu_T[0]);
                         gen_helper_fildl_ST0(cpu_env, cpu_tmp2_i32);
                         break;
@@ -6525,7 +6525,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                     case 1:
                         gen_helper_fisttl_ST0(cpu_tmp2_i32, cpu_env);
                         tcg_gen_extu_i32_tl(cpu_T[0], cpu_tmp2_i32);
-                        gen_op_st_T0_A0(OT_LONG + s->mem_index, s);
+                        gen_op_st_T0_A0(s, OT_LONG + s->mem_index);
                         break;
                     case 2:
                         gen_helper_fisttll_ST0(cpu_tmp1_i64, cpu_env);
@@ -6536,7 +6536,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                     default:
                         gen_helper_fistt_ST0(cpu_tmp2_i32, cpu_env);
                         tcg_gen_extu_i32_tl(cpu_T[0], cpu_tmp2_i32);
-                        gen_op_st_T0_A0(OT_WORD + s->mem_index, s);
+                        gen_op_st_T0_A0(s, OT_WORD + s->mem_index);
                         break;
                     }
                     gen_helper_fpop(cpu_env);
@@ -6549,12 +6549,12 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                     case 0:
                         gen_helper_fsts_ST0(cpu_tmp2_i32, cpu_env);
                         tcg_gen_extu_i32_tl(cpu_T[0], cpu_tmp2_i32);
-                        gen_op_st_T0_A0(OT_LONG + s->mem_index, s);
+                        gen_op_st_T0_A0(s, OT_LONG + s->mem_index);
                         break;
                     case 1:
                         gen_helper_fistl_ST0(cpu_tmp2_i32, cpu_env);
                         tcg_gen_extu_i32_tl(cpu_T[0], cpu_tmp2_i32);
-                        gen_op_st_T0_A0(OT_LONG + s->mem_index, s);
+                        gen_op_st_T0_A0(s, OT_LONG + s->mem_index);
                         break;
                     case 2:
                         gen_helper_fstl_ST0(cpu_tmp1_i64, cpu_env);
@@ -6565,7 +6565,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                     default:
                         gen_helper_fist_ST0(cpu_tmp2_i32, cpu_env);
                         tcg_gen_extu_i32_tl(cpu_T[0], cpu_tmp2_i32);
-                        gen_op_st_T0_A0(OT_WORD + s->mem_index, s);
+                        gen_op_st_T0_A0(s, OT_WORD + s->mem_index);
                         break;
                     }
                     if ((op & 7) == 3)
@@ -6583,7 +6583,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                 //QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_FETCH);
                 //QTRACE_CLIENT_MODULE(s);
 
-                gen_op_ld_T0_A0(OT_WORD + s->mem_index, s);
+                gen_op_ld_T0_A0(s, OT_WORD + s->mem_index);
                 tcg_gen_trunc_tl_i32(cpu_tmp2_i32, cpu_T[0]);
                 gen_helper_fldcw(cpu_env, cpu_tmp2_i32);
                 break;
@@ -6595,7 +6595,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             case 0x0f: /* fnstcw mem */
                 gen_helper_fnstcw(cpu_tmp2_i32, cpu_env);
                 tcg_gen_extu_i32_tl(cpu_T[0], cpu_tmp2_i32);
-                gen_op_st_T0_A0(OT_WORD + s->mem_index, s);
+                gen_op_st_T0_A0(s, OT_WORD + s->mem_index);
                 break;
             case 0x1d: /* fldt mem */
                 gen_update_cc_op(s);
@@ -6621,7 +6621,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             case 0x2f: /* fnstsw mem */
                 gen_helper_fnstsw(cpu_tmp2_i32, cpu_env);
                 tcg_gen_extu_i32_tl(cpu_T[0], cpu_tmp2_i32);
-                gen_op_st_T0_A0(OT_WORD + s->mem_index, s);
+                gen_op_st_T0_A0(s, OT_WORD + s->mem_index);
                 break;
             case 0x3c: /* fbld */
                 gen_update_cc_op(s);
@@ -7207,7 +7207,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         } else {
             gen_stack_A0(s);
             /* pop offset */
-            gen_op_ld_T0_A0(1 + s->dflag + s->mem_index, s);
+            gen_op_ld_T0_A0(s, 1 + s->dflag + s->mem_index);
             if (s->dflag == 0)
                 gen_op_andl_T0_ffff();
             /* NOTE: keeping EIP updated is not a problem in case of
@@ -7215,7 +7215,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             gen_op_jmp_T0();
             /* pop selector */
             gen_op_addl_A0_im(2 << s->dflag);
-            gen_op_ld_T0_A0(1 + s->dflag + s->mem_index, s);
+            gen_op_ld_T0_A0(s, 1 + s->dflag + s->mem_index);
             gen_op_movl_seg_T0_vm(R_CS);
             /* add stack offset */
             gen_stack_update(s, val + (4 << s->dflag));
@@ -7491,7 +7491,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         if (mod != 3) {
             s->rip_offset = 1;
             gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
-            gen_op_ld_T0_A0(ot + s->mem_index, s);
+            gen_op_ld_T0_A0(s, ot + s->mem_index);
         } else {
             gen_op_mov_TN_reg(ot, 0, rm);
         }
@@ -7527,7 +7527,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             tcg_gen_sari_tl(cpu_tmp0, cpu_T[1], 3 + ot);
             tcg_gen_shli_tl(cpu_tmp0, cpu_tmp0, ot);
             tcg_gen_add_tl(cpu_A0, cpu_A0, cpu_tmp0);
-            gen_op_ld_T0_A0(ot + s->mem_index, s);
+            gen_op_ld_T0_A0(s, ot + s->mem_index);
         } else {
             gen_op_mov_TN_reg(ot, 0, rm);
         }
@@ -7562,7 +7562,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         set_cc_op(s, CC_OP_SARB + ot);
         if (op != 0) {
             if (mod != 3)
-                gen_op_st_T0_A0(ot + s->mem_index, s);
+                gen_op_st_T0_A0(s, ot + s->mem_index);
             else
                 gen_op_mov_reg_T0(ot, rm);
             tcg_gen_mov_tl(cpu_cc_src, cpu_tmp4);
@@ -8043,12 +8043,12 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             gen_svm_check_intercept(s, pc_start, SVM_EXIT_GDTR_READ);
             gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
             tcg_gen_ld32u_tl(cpu_T[0], cpu_env, offsetof(CPUX86State, gdt.limit));
-            gen_op_st_T0_A0(OT_WORD + s->mem_index, s);
+            gen_op_st_T0_A0(s, OT_WORD + s->mem_index);
             gen_add_A0_im(s, 2);
             tcg_gen_ld_tl(cpu_T[0], cpu_env, offsetof(CPUX86State, gdt.base));
             if (!s->dflag)
                 gen_op_andl_T0_im(0xffffff);
-            gen_op_st_T0_A0(CODE64(s) + OT_LONG + s->mem_index, s);
+            gen_op_st_T0_A0(s, CODE64(s) + OT_LONG + s->mem_index);
             break;
         case 1:
             if (mod == 3) {
@@ -8110,12 +8110,12 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                 gen_svm_check_intercept(s, pc_start, SVM_EXIT_IDTR_READ);
                 gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
                 tcg_gen_ld32u_tl(cpu_T[0], cpu_env, offsetof(CPUX86State, idt.limit));
-                gen_op_st_T0_A0(OT_WORD + s->mem_index, s);
+                gen_op_st_T0_A0(s, OT_WORD + s->mem_index);
                 gen_add_A0_im(s, 2);
                 tcg_gen_ld_tl(cpu_T[0], cpu_env, offsetof(CPUX86State, idt.base));
                 if (!s->dflag)
                     gen_op_andl_T0_im(0xffffff);
-                gen_op_st_T0_A0(CODE64(s) + OT_LONG + s->mem_index, s);
+                gen_op_st_T0_A0(s, CODE64(s) + OT_LONG + s->mem_index);
             }
             break;
         case 2: /* lgdt */
@@ -8216,9 +8216,9 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                 gen_svm_check_intercept(s, pc_start,
                                         op==2 ? SVM_EXIT_GDTR_WRITE : SVM_EXIT_IDTR_WRITE);
                 gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
-                gen_op_ld_T1_A0(OT_WORD + s->mem_index, s);
+                gen_op_ld_T1_A0(s, OT_WORD + s->mem_index);
                 gen_add_A0_im(s, 2);
-                gen_op_ld_T0_A0(CODE64(s) + OT_LONG + s->mem_index, s);
+                gen_op_ld_T0_A0(s, CODE64(s) + OT_LONG + s->mem_index);
                 if (!s->dflag)
                     gen_op_andl_T0_im(0xffffff);
                 if (op == 2) {
@@ -8339,9 +8339,9 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             } else {
                 gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
                 if (d_ot == OT_QUAD) {
-                    gen_op_lds_T0_A0(OT_LONG + s->mem_index, s);
+                    gen_op_lds_T0_A0(s, OT_LONG + s->mem_index);
                 } else {
-                    gen_op_ld_T0_A0(OT_LONG + s->mem_index, s);
+                    gen_op_ld_T0_A0(s, OT_LONG + s->mem_index);
                 }
                 gen_op_mov_reg_T0(d_ot, reg);
             }
@@ -8363,7 +8363,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             rm = modrm & 7;
             if (mod != 3) {
                 gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
-                gen_op_ld_v(ot + s->mem_index, t0, cpu_A0, s);
+                gen_op_ld_v(s, ot + s->mem_index, t0, cpu_A0);
                 a0 = tcg_temp_local_new();
                 tcg_gen_mov_tl(a0, cpu_A0);
             } else {
@@ -8381,7 +8381,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             tcg_gen_movi_tl(t2, CC_Z);
             gen_set_label(label1);
             if (mod != 3) {
-                gen_op_st_v(ot + s->mem_index, t0, a0, s);
+                gen_op_st_v(s, ot + s->mem_index, t0, a0);
                 tcg_temp_free(a0);
            } else {
                 gen_op_mov_reg_v(ot, rm, t0);
@@ -8593,12 +8593,12 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                 goto illegal_op;
             gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
             if (op == 2) {
-                gen_op_ld_T0_A0(OT_LONG + s->mem_index, s);
+                gen_op_ld_T0_A0(s, OT_LONG + s->mem_index);
                 tcg_gen_trunc_tl_i32(cpu_tmp2_i32, cpu_T[0]);
                 gen_helper_ldmxcsr(cpu_env, cpu_tmp2_i32);
             } else {
                 tcg_gen_ld32u_tl(cpu_T[0], cpu_env, offsetof(CPUX86State, mxcsr));
-                gen_op_st_T0_A0(OT_LONG + s->mem_index, s);
+                gen_op_st_T0_A0(s, OT_LONG + s->mem_index);
             }
             break;
         case 5: /* lfence */
