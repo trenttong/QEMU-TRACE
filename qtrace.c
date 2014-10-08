@@ -84,27 +84,27 @@ static void add_function_to_list(void *rtn,
                                  const char *fname, 
                                  GenericRtnContainer **list)
 {
-    /* it is possible that this module does not define a instruction callback */
-    if (!rtn) return;
+   /* it is possible that this module does not define a instruction callback */
+   if (!rtn) return;
 
-      GenericRtnContainer *head = *list;
-      if (!*list) 
+   GenericRtnContainer *head = *list;
+   if (!*list) 
    {
       head = *list = (GenericRtnContainer*) malloc(sizeof(GenericRtnContainer));
    }
-      else 
-      {
-        /* get to the end of the linkedlist */
-        while(head->next) head = head->next;
-        head->next = (GenericRtnContainer*) malloc(sizeof(GenericRtnContainer));
-        head = head->next;
-      }
+   else 
+   {
+      /* get to the end of the linkedlist */
+      while(head->next) head = head->next;
+      head->next = (GenericRtnContainer*) malloc(sizeof(GenericRtnContainer));
+      head = head->next;
+   }
 
-      /* register the callback */
-      head->rtn   = rtn;
+   /* register the callback */
+   head->rtn   = rtn;
    head->mname = mname;
    head->fname = fname;
-      head->next  = NULL;
+   head->next  = NULL;
 }
 
 /// @ register_stats_reset - register a function to resetstats_list list.
@@ -113,7 +113,7 @@ static void register_function_to_list(void* function,
                                       const char* fname, 
                                       GenericRtnContainer **list)  
 { 
-    add_function_to_list(function, mname, fname, list);
+   add_function_to_list(function, mname, fname, list);
 }
 
 /// @ qtrace_increment_uiid - increment the uiid. one more instruction has passed.
@@ -121,8 +121,8 @@ void qtrace_increment_uiid(void) { uiid ++; }
 /// @ qtrace_allocate_icontext_root - allocate a icontext root pointer.
 void qtrace_allocate_icontext_root(void) 
 { 
-    rootarray[rootcount++] = 0;  
-    assert(rootcount < MAX_ICONTEXT_ROOT); 
+   rootarray[rootcount++] = 0;  
+   assert(rootcount < MAX_ICONTEXT_ROOT); 
 }
 /// @ qtrace_get_current_icontext_list - return the current icontext.
 InstrumentContext* qtrace_get_current_icontext_list(void) 

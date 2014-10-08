@@ -2715,12 +2715,6 @@ static inline void tcg_gen_qemu_st64(TCGv_i64 arg, TCGv addr, int mem_index)
     tcg_gen_qemu_st_i64(arg, addr, mem_index, MO_TEQ);
 }
 
-static inline void tcg_gen_qemu_xlate(TCGv ret, TCGv addr, int mem_index)
-{
-    // tcg_gen_qemu_xlate_tl(ret, addr, mem_index);
-}
-
-
 #if TARGET_LONG_BITS == 64
 #define tcg_gen_movi_tl tcg_gen_movi_i64
 #define tcg_gen_mov_tl tcg_gen_mov_i64

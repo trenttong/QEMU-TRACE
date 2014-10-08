@@ -250,4 +250,3 @@ void qtrace_icontext_sanity_check(InstrumentContext *);
 InstrumentContext* qtrace_get_current_icontext_list(void);
 
 #endif /* QTRACE_H */
-

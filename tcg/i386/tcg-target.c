@@ -36,7 +36,6 @@ static const char * const tcg_target_reg_names[TCG_TARGET_NB_REGS] = {
 };
 #endif
 
-
 static const int tcg_target_reg_alloc_order[] = {
 #if TCG_TARGET_REG_BITS == 64
     TCG_REG_RBP,
@@ -112,7 +111,6 @@ static bool have_cmov;
 #else
 # define have_cmov 0
 #endif
-
 
 static uint8_t *tb_ret_addr;
 
@@ -1371,7 +1369,6 @@ static inline void tcg_out_tlb_load_trace_vpma(TCGContext *s, TCGReg addrlo, TCG
 
     /* TLB Hit.  */
 
-
     /* add addend(r0), r1 */
     tcg_out_modrm_offset(s, OPC_ADD_GvEv + hrexw, r1, r0,
                          offsetof(CPUTLBEntry, addend) - which);
@@ -1675,7 +1672,7 @@ static void tcg_out_qemu_ld(TCGContext *s, const TCGArg *args, bool is64)
     int mem_index;
     int mem_trace;
     TCGMemOp s_bits;
-    uint8_t *label_ptr[2] = { 0, 0 };
+    uint8_t *label_ptr[2];
 #endif
     unsigned maddrs = 0;
 
@@ -1843,7 +1840,6 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, bool is64)
 #endif
 
     unsigned maddrs = 0;
-
     datalo = *args++;
     datahi = (TCG_TARGET_REG_BITS == 32 && is64 ? *args++ : 0);
     addrlo = *args++;

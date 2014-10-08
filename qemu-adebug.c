@@ -23,8 +23,8 @@
 #include <stdlib.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
-#include "qemu-adebug.h"
 #include <stdbool.h>
+#include "qemu-adebug.h"
 
 /// --------------------------------------------
 /* connect/disconnect the shared memory */
@@ -56,10 +56,8 @@ static inline void handle_connection_##cmd(DebugChannel *channel,   \
                                            const char *mname,       \
                                            bool *valid)             \
 {                                                                   \
-   if (fname)                                                       \
-        memcpy(channel->fname, fname, strlen(fname));               \
-   if (mname)                                                       \
-        memcpy(channel->mname, mname, strlen(mname));               \
+   if (fname) memcpy(channel->fname, fname, strlen(fname));         \
+   if (mname) memcpy(channel->mname, mname, strlen(mname));         \
    channel->var = 1;                                                \
    QTRACE_WAIT_COMMAND_HANDLED(channel->var);                       \
    *valid = true;                                                   \
@@ -74,43 +72,42 @@ QTRACE_HANDLE_CONNECTION(client_print_all, client_print_all);
 
 static inline void handle_connection_success(int argc, char** argv, DebugChannel *channel) 
 {
-     int i;
-     for (i=1;i<argc;++i)
-     {
-        bool valid_command = false;
-        if (!strcmp(argv[i], flushcc)) handle_connection_flushcc(channel, 0, 0, &valid_command);
-        if (!strcmp(argv[i], client_userd)) handle_connection_client_userd(channel, 
-                                                                           argv[++i], 
-                                                                           argv[++i], 
-                                                                           &valid_command);
-        if (!strcmp(argv[i], client_reset)) handle_connection_client_reset(channel, 
-                                                                           0, 
-                                                                           argv[++i], 
-                                                                           &valid_command);
-        if (!strcmp(argv[i], client_print)) handle_connection_client_print(channel, 
-                                                                           0, 
-                                                                           argv[++i], 
-                                                                           &valid_command);
-        if (!strcmp(argv[i], client_reset_all)) handle_connection_client_reset_all(channel, 
-                                                                                   0, 0, 
-                                                                                   &valid_command);
-        if (!strcmp(argv[i], client_print_all)) handle_connection_client_print_all(channel, 
-                                                                                   0, 0, 
-                                                                                   &valid_command);
+   int i;
+   for (i=1;i<argc;++i)
+   {
+      bool valid_command = false;
+      if (!strcmp(argv[i], flushcc)) handle_connection_flushcc(channel, 0, 0, &valid_command);
+      if (!strcmp(argv[i], client_userd)) handle_connection_client_userd(channel, 
+                                                                         argv[++i], 
+                                                                         argv[++i], 
+                                                                         &valid_command);
+      if (!strcmp(argv[i], client_reset)) handle_connection_client_reset(channel, 
+                                                                         0, 
+                                                                         argv[++i], 
+                                                                         &valid_command);
+      if (!strcmp(argv[i], client_print)) handle_connection_client_print(channel, 
+                                                                         0, 
+                                                                         argv[++i], 
+                                                                         &valid_command);
+      if (!strcmp(argv[i], client_reset_all)) handle_connection_client_reset_all(channel, 
+                                                                                 0, 0, 
+                                                                                 &valid_command);
+      if (!strcmp(argv[i], client_print_all)) handle_connection_client_print_all(channel, 
+                                                                                 0, 0, 
+                                                                                 &valid_command);
       if (!valid_command) 
       {
-            QTRACE_ERROR("invalid command %s\n", argv[i]);
-            QTRACE_EXIT(-1);
+         QTRACE_ERROR("invalid command %s\n", argv[i]);
+         QTRACE_EXIT(-1);
       }
-     }
-
+   }
    return;
 }
 
 static void handle_connection_error(void) 
 {
    QTRACE_ERROR("unable to connect to shm %d\n", SHARED_MEM_KEY);
-     QTRACE_EXIT(-1);
+   QTRACE_EXIT(-1);
 }
 
 static void print_help(void)
@@ -132,16 +129,16 @@ int main(int argc, char **argv)
       exit(0);
    }
 
-      /* connect to the shared memory */
-      DebugChannel *channel=connect();
+   /* connect to the shared memory */
+   DebugChannel *channel=connect();
    
-      if (!channel) handle_connection_error();
-      else handle_connection_success(argc, argv, channel); 
+   if (!channel) handle_connection_error();
+   else handle_connection_success(argc, argv, channel); 
 
-      /* disconnect */
-      disconnect(channel);
+   /* disconnect */
+   disconnect(channel);
 
    /* done */
-      return 0;
+   return 0;
 }
 

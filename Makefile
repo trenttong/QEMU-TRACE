@@ -190,7 +190,7 @@ libqemuutil.a: $(util-obj-y) qapi-types.o qapi-visit.o
 ######################################################################
 
 qemu-img.o: qemu-img-cmds.h
-qemu-adebug.o: qemu-adebug.h
+qemu-adebug.o: qemu-adebug.h 
 
 qemu-img$(EXESUF): qemu-img.o $(block-obj-y) libqemuutil.a libqemustub.a
 qemu-nbd$(EXESUF): qemu-nbd.o $(block-obj-y) libqemuutil.a libqemustub.a

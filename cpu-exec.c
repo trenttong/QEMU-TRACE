@@ -24,9 +24,6 @@
 #include "sysemu/qtest.h"
 #include "qtrace.h"
 
-extern void * client_reset_stats;
-extern void  * client_print_stats;
-
 
 bool qemu_cpu_has_work(CPUState *cpu)
 {
@@ -104,7 +101,6 @@ static inline tcg_target_ulong cpu_tb_exec(CPUState *cpu, uint8_t *tb_ptr)
          */
         cpu->tcg_exit_req = 0;
     }
-
     return next_tb;
 }
 
@@ -229,7 +225,6 @@ static void cpu_handle_debug_exception(CPUArchState *env)
 /* main execution loop */
 
 volatile sig_atomic_t exit_request;
-
 
 int cpu_exec(CPUArchState *env)
 {
@@ -627,13 +622,11 @@ int cpu_exec(CPUArchState *env)
 #endif
                 }
 #endif /* DEBUG_DISAS */
-
                 /* handle QTRACE commands */
                 qtrace_cpu_handle_cmds(env);
 
                 spin_lock(&tcg_ctx.tb_ctx.tb_lock);
                 tb = tb_find_fast(env);
-
                 /* Note: we do it here to avoid a gcc bug on Mac OS X when
                    doing it in tb_find_slow */
                 if (tcg_ctx.tb_ctx.tb_invalidated_flag) {
@@ -666,10 +659,6 @@ int cpu_exec(CPUArchState *env)
                 barrier();
                 if (likely(!cpu->exit_request)) {
                     tc_ptr = tb->tc_ptr;
-
-    //                if (tc_ptr == 0x7fe71ba91580)
-                 //   printf("tc_ptr is 0x%lx\n", tc_ptr);
-
                     /* execute the generated code */
                     next_tb = cpu_tb_exec(cpu, tc_ptr);
                     switch (next_tb & TB_EXIT_MASK) {

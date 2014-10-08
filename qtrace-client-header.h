@@ -34,11 +34,11 @@ unsigned UserDefineCallBackNum  = 0;
 unsigned ResetStatsCallBackNum  = 0;
 unsigned PrintStatsCallBackNum  = 0;
 
-GenericRtnContainer* ResetStatsCallBackArray[QTRACE_MAX_CALLBACK_NUM]   = {0};
-GenericRtnContainer* PrintStatsCallBackArray[QTRACE_MAX_CALLBACK_NUM]   = {0};
-GenericRtnContainer* InstructionCallBackArray[QTRACE_MAX_CALLBACK_NUM]  = {0};
-GenericRtnContainer* BasicBlockCallBackArray[QTRACE_MAX_CALLBACK_NUM]   = {0};
-GenericRtnContainer* UserDefineCallBackArray[QTRACE_MAX_CALLBACK_NUM]   = {0};
+GenericRtnContainer* ResetStatsCallBackArray[QTRACE_MAX_CALLBACK_NUM] = {0};
+GenericRtnContainer* PrintStatsCallBackArray[QTRACE_MAX_CALLBACK_NUM] = {0};
+GenericRtnContainer* InstructionCallBackArray[QTRACE_MAX_CALLBACK_NUM]= {0};
+GenericRtnContainer* BasicBlockCallBackArray[QTRACE_MAX_CALLBACK_NUM] = {0};
+GenericRtnContainer* UserDefineCallBackArray[QTRACE_MAX_CALLBACK_NUM] = {0};
 
 /* hook up the QTRACE function to insert instrumentation */
 void InitializeInstructionInstrument(QTRACE_INSERT_INSTRUMENT rtn)
@@ -89,4 +89,3 @@ void AddUserDefineCallBack(void *rtn, char *fname)
 }
 
 #endif /* QTRACE_CLIENT_HEADER_H */
-

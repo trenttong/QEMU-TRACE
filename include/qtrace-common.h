@@ -78,7 +78,6 @@ typedef struct InstrumentContext  {
 	struct InstrumentContext *next;
 } InstrumentContext;
 
-
 /// ------------------------------------------------ ///
 /// qtrace asynchronous debug channel. 
 /// ------------------------------------------------ ///

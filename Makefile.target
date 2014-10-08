@@ -152,6 +152,7 @@ ifndef CONFIG_HAIKU
 LIBS+=-lm
 endif
 
+# Loading user plugin modules.
 LIBS+=-ldl
 
 ifdef QEMU_PROGW

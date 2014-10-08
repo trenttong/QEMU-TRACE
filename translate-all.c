@@ -157,12 +157,6 @@ int cpu_gen_code(CPUArchState *env, TranslationBlock *tb, int *gen_code_size_ptr
     /* free all the instrumentation context. start anew */
     qtrace_free_all_icontexts();
 
-#if 0 
-    static int count = 0;
-    if (count++)
-    printf("%d gene blocks\n", count);
-#endif
-
     tcg_func_start(s);
 
     gen_intermediate_code(env, tb);
@@ -176,6 +170,8 @@ int cpu_gen_code(CPUArchState *env, TranslationBlock *tb, int *gen_code_size_ptr
     /* qtrace */
     tb->qtrace_next_offset[0] = 0;
     tb->qtrace_next_offset[1] = 0;
+    tb->qtrace_next_offset[2] = 0;
+    tb->qtrace_next_offset[3] = 0;
     s->qtrace_next_offset = tb->qtrace_next_offset;
 #ifdef USE_DIRECT_JUMP
     s->tb_jmp_offset = tb->tb_jmp_offset;
