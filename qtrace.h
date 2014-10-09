@@ -22,6 +22,7 @@
 
 #include "qtrace-common.h"
 #include <math.h>
+#include <stdbool.h>
 
 /// ------------------------------------------------ ///
 /// instruction types. 
@@ -172,7 +173,6 @@
     int i = (x & QTRACE_MEMTRACE_STORE_PSTOP_VALUE); QTRACE_RESET_MEMTRACE_STORE_PSTOP_VALUE(x);i; \
 })
 
-
 /// ------------------------------------------- 
 /// register tracing.
 /// ------------------------------------------- 
@@ -189,6 +189,7 @@
 /// program counter tracing.
 /// ------------------------------------------- 
 #define QTRACE_PCTRACE_VMA                          (1<<21)
+#define QTRACE_PCTRACE_PMA                          (1<<22)
 
 /// ------------------------------------------------ ///
 /// instrumentation prototypes. 
@@ -248,5 +249,8 @@ void qtrace_increment_uiid(void);
 void qtrace_icontext_sanity_check(InstrumentContext *);
 /// qtrace_get_current_icontext_list - return the root of the current icontext.
 InstrumentContext* qtrace_get_current_icontext_list(void);
+/// @ qtrace_has_instrument - whether a given icontext list has a
+/// @ specified type of instrumentation.
+bool qtrace_has_instrument(InstrumentContext *ictx, unsigned position);
 
 #endif /* QTRACE_H */

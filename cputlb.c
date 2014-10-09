@@ -233,6 +233,22 @@ static void tlb_add_large_page(CPUArchState *env, target_ulong vaddr,
     env->tlb_flush_mask = mask;
 }
 
+/* Maps a virtual address to a physical without fail. */
+hwaddr tlb_fetch_xlate_after_refill_no_fail(CPUArchState *env, 
+                                            target_ulong vaddr, 
+                                            unsigned mmu_idx)
+{
+    unsigned page_offset= (vaddr & ((1<<TARGET_PAGE_BITS)-1));
+    unsigned page_index = (vaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+    if (unlikely(env->tlb_table[mmu_idx][page_index].addr_read!=
+                (vaddr & (TARGET_PAGE_MASK)))) 
+    {
+        QTRACE_ERROR("failed translation. QTRACE_PCTRACE_PMA incorrect\n"); 
+    }
+
+    return env->tlb_table[mmu_idx][page_index].addr_phys | page_offset;
+}
+
 /* Add a new TLB entry. At most one entry for a given virtual address
    is permitted. Only a single TARGET_PAGE_SIZE region is mapped, the
    supplied size is only used by tlb_flush_page.  */
@@ -282,6 +298,7 @@ void tlb_set_page(CPUArchState *env, target_ulong vaddr,
     env->iotlb[mmu_idx][index] = iotlb - vaddr;
     te = &env->tlb_table[mmu_idx][index];
     te->addend = addend - vaddr;
+    te->addr_phys = paddr;
     if (prot & PAGE_READ) {
         te->addr_read = address;
     } else {

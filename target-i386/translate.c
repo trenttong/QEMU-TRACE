@@ -125,6 +125,7 @@ do                                                                      \
 {  /* generate the pre & post inst  instrumentation */                  \
    InstrumentContext *ictx = qtrace_get_current_icontext_list();        \
    tcg_gen_op1i(INDEX_op_qtrace_instrumentation, (uintptr_t)ictx);      \
+   if (qtrace_has_instrument(ictx, QTRACE_IPOINT_AFTER)) gen_op_sync_pstinst_pc(s); \
    ictx = NULL;                                                         \
 }                                                                       \
 while(0);
@@ -149,6 +150,7 @@ typedef struct DisasContext {
     int aflag, dflag;
     target_ulong pc; /* pc = eip + cs_base */
     target_ulong pc_start; /* pc = eip + cs_base */
+    hwaddr phys_pc_start; /* physical pc start */
     int is_jmp; /* 1 = means jump (stop translation), 2 means CPU
                    static state change (stop translation) */
     /* current block context */
@@ -327,8 +329,48 @@ static void set_cc_op(DisasContext *s, CCOp op)
     s->cc_op = op;
 }
 
+static inline void gen_op_sync_pc(target_ulong val)
+{
+    tcg_gen_movi_tl(cpu_tmp0, val);
+    tcg_gen_st_tl(cpu_tmp0, cpu_env, offsetof(CPUX86State, eip));
+}
 
-static void gen_op_sync_pc(DisasContext *s);
+static inline void gen_op_sync_lpc(target_ulong val)
+{
+    tcg_gen_movi_tl(cpu_tmp0, val);
+    tcg_gen_st_tl(cpu_tmp0, cpu_env, offsetof(CPUX86State, linear_eip));
+}
+
+static inline void gen_op_sync_ppc(target_ulong val)
+{
+    tcg_gen_movi_tl(cpu_tmp0, val);
+    tcg_gen_st_tl(cpu_tmp0, cpu_env, offsetof(CPUX86State, phys_eip));
+}
+
+static inline void gen_op_sync_preinst_pc(DisasContext *s)
+{
+    gen_op_sync_pc(s->pc_start - s->cs_base);
+}
+
+static inline void gen_op_sync_pstinst_pc(DisasContext *s)
+{
+    gen_op_sync_pc(s->pc - s->cs_base);
+}
+
+static inline void gen_op_sync_preinst_lpc(DisasContext *s)
+{
+    gen_op_sync_lpc(s->pc_start);
+}
+
+static inline void gen_op_sync_pstinst_lpc(DisasContext *s)
+{
+    gen_op_sync_lpc(s->pc);
+}
+
+static inline void gen_op_sync_preinst_ppc(DisasContext *s)
+{
+    gen_op_sync_ppc(s->phys_pc_start);
+}
 
 static unsigned qtrace_get_register_size_and_offset(DisasContext *s, 
                                                     unsigned  regnum, 
@@ -362,6 +404,16 @@ static unsigned qtrace_get_register_size_and_offset(DisasContext *s,
          *rmsize = sizeof(target_ulong)*8;
          *offset = offsetof(CPUX86State, eip);
          break;
+    /* linear program counter register */
+    case R_LRIP :
+         *rmsize = sizeof(target_ulong)*8;
+         *offset = offsetof(CPUX86State, linear_eip);
+         break;
+    /* physical program counter register */
+    case R_PRIP :
+         *rmsize = sizeof(target_ulong)*8;
+         *offset = offsetof(CPUX86State, phys_eip);
+         break;
     /* control register */
     case R_CR0 :
     case R_CR1 :
@@ -393,7 +445,7 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
 {
 #define OFS(x) offsetof(CPUArchState, x);
     InstrumentContext *icontext = qtrace_get_current_icontext_list();
-    if (icontext)
+    while (icontext)
     {
         unsigned idx = 0, ciarg = icontext->ciarg;
         unsigned regidx = 0, offset = 0, rmsize = 0;
@@ -408,7 +460,9 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
                  regidx = icontext->iargs[++idx];
                  qtrace_get_register_size_and_offset(s, regidx, &rmsize, &offset);
                  /* synchronize the pc if instrumenting it */
-                 //if (regidx == R_RIP) gen_op_sync_pc(s); 
+                 if (regidx == R_RIP && QTRACE_PREINST(icontext)) gen_op_sync_preinst_pc(s); 
+                 if (regidx == R_LRIP && QTRACE_PREINST(icontext)) gen_op_sync_preinst_lpc(s); 
+                 if (regidx == R_PRIP && QTRACE_PREINST(icontext)) gen_op_sync_preinst_ppc(s); 
                  /* create a register shadow if preinst instrumentation */
                  if (QTRACE_PREINST(icontext))
                  {
@@ -471,6 +525,21 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
                  icontext->iargs[idx] = OFS(store_shadow.pstvalue);
                  break;
             /// ---------------------------------- ///
+            /// program counter trace.
+            /// ---------------------------------- ///
+            case QTRACE_PCTRACE_VMA:
+                 /* register trace with R_RIP */
+                 icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE;
+                 icontext->iargs[idx+1] = R_LRIP;
+                 --idx;
+                 break;
+            case QTRACE_PCTRACE_PMA:
+                 /* register trace with R_RIP */
+                 icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE;
+                 icontext->iargs[idx+1] = R_PRIP;
+                 --idx;
+                 break;
+            /// ---------------------------------- ///
             /// process ID trace.
             /// ---------------------------------- ///
             case QTRACE_PROCESS_UPID:
@@ -483,6 +552,7 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
             } 
             ++idx;
         }
+        icontext = icontext->next;
     }
     return;
 #undef OFS
@@ -716,13 +786,6 @@ static inline void gen_op_addl_T0_T1(void)
 static inline void gen_op_jmp_T0(void)
 {
     tcg_gen_st_tl(cpu_T[0], cpu_env, offsetof(CPUX86State, eip));
-}
-
-static void gen_op_sync_pc(DisasContext *s)
-{
-    target_ulong curr_eip = s->pc_start - s->cs_base;
-    gen_movtl_T0_im(curr_eip);
-    gen_op_jmp_T0();
 }
 
 static inline void qtrace_gen_push_pcfext_imm(target_ulong pc)
@@ -4966,6 +5029,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     s->vex_v = 0;
  next_byte:
     b = cpu_ldub_code(env, s->pc);
+    s->phys_pc_start = tlb_fetch_xlate_after_refill_no_fail(env, s->pc, cpu_mmu_index(env));
     s->pc++;
     /* Collect prefixes.  */
     switch (b) {

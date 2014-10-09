@@ -659,6 +659,10 @@ int cpu_exec(CPUArchState *env)
                 barrier();
                 if (likely(!cpu->exit_request)) {
                     tc_ptr = tb->tc_ptr;
+                    if (env->eip == 0xfd277)
+                    {
+                    //    printf("faulty pc \n");
+                    } 
                     /* execute the generated code */
                     next_tb = cpu_tb_exec(cpu, tc_ptr);
                     switch (next_tb & TB_EXIT_MASK) {

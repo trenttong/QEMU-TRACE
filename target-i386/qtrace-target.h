@@ -60,12 +60,16 @@
 #define QTRACE_X86_R15 R_R15
 #define QTRACE_X86_RIP R_RIP
 
+/* arcitecturally invisible register */
+#define R_LRIP 17
+#define R_PRIP 18
+
 /* control register. */
-#define R_CR0 17
-#define R_CR1 18
-#define R_CR2 19
-#define R_CR3 20 
-#define R_CR4 21
+#define R_CR0 19
+#define R_CR1 20
+#define R_CR2 21
+#define R_CR3 22 
+#define R_CR4 23
 
 #define QTRACE_X86_CR0 R_CR0
 #define QTRACE_X86_CR1 R_CR1
@@ -74,7 +78,7 @@
 #define QTRACE_X86_CR4 R_CR4
 
 /* timestamp counter register */
-#define R_TSC 22
+#define R_TSC 24
 #define QTRACE_X86_TSC R_TSC
 
 /// ------------------------------

@@ -4,7 +4,7 @@ include ../../config-host.mak
 CC_X86 = gcc
 CCFLAGS += -O3 -g -Wattributes -shared -fPIC  -I../../ -I../../include/ -I../../target-i386/ 
 
-INSTRUMENT_MODULES= memsim.so regsim.so 
+INSTRUMENT_MODULES= memsim.so regsim.so pcsim.so 
 all:    $(INSTRUMENT_MODULES)
 
 %.so:   %.c
