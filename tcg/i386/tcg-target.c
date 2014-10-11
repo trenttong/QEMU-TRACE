@@ -276,6 +276,7 @@ static inline int tcg_target_const_match(tcg_target_long val,
 #define OPC_LEA         (0x8d)
 #define OPC_MOVB_EvGv	(0x88)		/* stores, more or less */
 #define OPC_MOVL_EvGv	(0x89)		/* stores, more or less */
+#define OPC_MOVB_GvEv   (0x8a) 
 #define OPC_MOVL_GvEv	(0x8b)		/* loads, more or less */
 #define OPC_MOVB_EvIz   (0xc6)
 #define OPC_MOVL_EvIz	(0xc7)
@@ -1297,7 +1298,6 @@ static inline void tcg_out_tlb_load_trace_pma(TCGContext *s, TCGReg addrlo, TCGR
     tcg_out_modrm_offset(s, OPC_MOVL_EvGv+hrexw, r0, TCG_AREG0, offset);
 }
 
-
 static inline void tcg_out_tlb_load_trace_vpma(TCGContext *s, TCGReg addrlo, TCGReg addrhi,
                                                int mem_index, TCGMemOp s_bits,
                                                uint8_t **label_ptr, int which)
@@ -1932,7 +1932,9 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, bool is64)
 /* QTRACE - macros to set up arguments for instrumentation calls */
 static inline void tcg_out_qtrace_instrument_reg_setup(TCGContext *s, 
                                                        InstrumentContext *icontext, 
-                                                       int rm, int offset)
+                                                       uint32_t regnum, 
+                                                       uint32_t vopcode, 
+                                                       uint32_t voffset)
 {
     /* load from the shadow area */
     if (QTRACE_PREINST(icontext))
@@ -1941,22 +1943,25 @@ static inline void tcg_out_qtrace_instrument_reg_setup(TCGContext *s,
                                offsetof(CPUArchState, shadowcpu_offset), 
                                0, MO_Q);
         tgen_arithr(s, ARITH_ADD + P_REXW, TCG_REG_RAX, TCG_AREG0);
-        tcg_out_modrm_offset(s, OPC_MOVL_GvEv+P_REXW, 
-                             tcg_target_call_iarg_regs[rm], 
-                             TCG_REG_RAX, offset);		
+        tcg_out_modrm_offset(s, vopcode, 
+                             tcg_target_call_iarg_regs[regnum], 
+                             TCG_REG_RAX, voffset);		
 
         goto reg_argument_setup;
     }
 
-    tcg_out_modrm_offset(s, OPC_MOVL_GvEv+P_REXW, tcg_target_call_iarg_regs[rm], 
-                         TCG_AREG0, offset);		
+    tcg_out_modrm_offset(s, vopcode, tcg_target_call_iarg_regs[regnum], 
+                         TCG_AREG0, voffset);		
 reg_argument_setup:
     return;
 }
 
 static inline void tcg_out_qtrace_instrument_stk_setup(TCGContext *s, 
                                                        InstrumentContext *icontext, 
-                                                       int offset)
+                                                       uint32_t vopcode, 
+                                                       uint32_t voffset, 
+                                                       uint32_t sopcode,
+                                                       uint32_t soffset)
 {
     /* load from the shadow area */
     if (QTRACE_PREINST(icontext))
@@ -1965,13 +1970,13 @@ static inline void tcg_out_qtrace_instrument_stk_setup(TCGContext *s,
                                offsetof(CPUArchState, shadowcpu_offset), 
                                0, MO_Q);
         tgen_arithr(s, ARITH_ADD + P_REXW, TCG_REG_RAX, TCG_AREG0);
-        tcg_out_modrm_offset(s, OPC_MOVL_GvEv+P_REXW, TCG_REG_RAX, TCG_REG_RAX, offset);		
-        tcg_out_push(s, TCG_REG_RAX);             
+        tcg_out_modrm_offset(s, vopcode, TCG_REG_RAX, TCG_REG_RAX, voffset);		
+        tcg_out_modrm_offset(s, sopcode, TCG_REG_RAX, TCG_REG_RSP, soffset);		
         goto stk_argument_setup;
     }
 
-    tcg_out_modrm_offset(s, OPC_MOVL_GvEv+P_REXW, TCG_REG_RAX, TCG_AREG0, offset);		
-    tcg_out_push(s, TCG_REG_RAX);             
+    tcg_out_modrm_offset(s, vopcode, TCG_REG_RAX, TCG_AREG0,   voffset);		
+    tcg_out_modrm_offset(s, sopcode, TCG_REG_RAX, TCG_REG_RSP, soffset);		
 stk_argument_setup:
     return;
 }
@@ -1981,22 +1986,37 @@ static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *ic
     int idx = 0;
     const int regcount = sizeof(tcg_target_call_iarg_regs)/sizeof(int);
     unsigned  currreg = 0, ciarg = icontext->ciarg, paramcount = 0;
-    unsigned stack_offset[QTRACE_MAX_IARGS];
-    unsigned stk_paramcount = 0;
+    unsigned stack_vopcode[QTRACE_MAX_IARGS];
+    unsigned stack_voffset[QTRACE_MAX_IARGS];
+    unsigned stack_sopcode[QTRACE_MAX_IARGS];
+    unsigned stack_sbssize[QTRACE_MAX_IARGS];
 
+    uint32_t stack_totalsize = 0, stack_currentsize = 0;
+    
+    unsigned stk_paramcount = 0;
+    int bmemop;
+    int vopcode = 0, sopcode = 0;
+    char prefix = 0;;
+
+    memset(stack_vopcode, 0, sizeof(unsigned)*QTRACE_MAX_IARGS);
+    memset(stack_voffset, 0, sizeof(unsigned)*QTRACE_MAX_IARGS);
+    memset(stack_sopcode, 0, sizeof(unsigned)*QTRACE_MAX_IARGS);
+    memset(stack_sbssize, 0, sizeof(unsigned)*QTRACE_MAX_IARGS);
+    
     /* first 6 integral arguments go into registers. */
     /* if more than 6 integral parameters, then pass rest on stack */
     for(idx = 0, currreg=0; idx<ciarg; ++idx)
     {
         bool use_reg = currreg<regcount;
-        unsigned offset = 0;
+        uint32_t voffset = 0;
         switch(icontext->iargs[idx])
         {
         /// ---------------------------------- ///
         /// register trace  
         /// ---------------------------------- ///
         case QTRACE_REGTRACE_VALUE:
-             offset = icontext->iargs[++idx];
+             voffset = icontext->iargs[++idx];
+             bmemop = icontext->iargs[++idx];  
              ++paramcount;
              break;
         /// ---------------------------------- ///
@@ -2012,34 +2032,80 @@ static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *ic
         case QTRACE_MEMTRACE_STORE_MSIZE:
         case QTRACE_MEMTRACE_STORE_PREOP_VALUE:
         case QTRACE_MEMTRACE_STORE_PSTOP_VALUE:
-             offset = icontext->iargs[++idx];
+             voffset = icontext->iargs[++idx];
              break;
         /// ---------------------------------- ///
         /// process ID trace.  
         /// ---------------------------------- ///
         case QTRACE_PROCESS_UPID:
-	          /* use CR[3] as the unique process ID */
-             offset = offsetof(CPUArchState, cr[3]);
-	          break;
+	         /* use CR[3] as the unique process ID */
+             voffset = offsetof(CPUArchState, cr[3]);
+	         break;
         default:
              break;
         }
 
+        /* figure out the opcode based on the size */
+        switch(bmemop)
+        {
+        case MO_64:
+             vopcode = OPC_MOVL_GvEv + P_REXW;
+             sopcode = OPC_MOVL_EvGv + P_REXW; 
+             break;
+        case MO_32:
+             vopcode = OPC_MOVL_GvEv;
+             sopcode = OPC_MOVL_EvGv + P_REXW; 
+             break;
+        case MO_16:
+             vopcode = OPC_MOVB_GvEv;
+             sopcode = OPC_MOVB_EvGv + P_REXW; 
+             break;
+        case MO_8:
+             vopcode = OPC_MOVB_GvEv;
+             sopcode = OPC_MOVB_EvGv + P_REXW; 
+             break;
+        default:
+             QTRACE_ERROR("unknown register size");
+             break;
+        }
+
         /* lastly. generate the instrumentation */
+        /* takes up one register */         
         if (use_reg)
         {
-            /* takes up one register */         
-            tcg_out_qtrace_instrument_reg_setup(s, icontext, currreg++, offset); 
+            tcg_out_qtrace_instrument_reg_setup(s, 
+                                                icontext, 
+                                                currreg++, 
+                                                vopcode, 
+                                                voffset);
         } else {
             /* this one goes onto the stack */
-            stack_offset[stk_paramcount++] = offset;
+            stack_vopcode[stk_paramcount] = vopcode;
+            stack_voffset[stk_paramcount] = voffset;
+            stack_sopcode[stk_paramcount] = sopcode;
+            stack_sbssize[stk_paramcount] = 8;
+            stack_totalsize += 8;
+            ++ stk_paramcount;
         }
+    }
+
+
+    /* setup the stack pointer */
+    if (paramcount > regcount) 
+    {
+        tgen_arithi(s, ARITH_SUB + P_REXW, TCG_REG_RSP, stack_totalsize, 0);
+        stack_currentsize = stack_totalsize;
     }
 
     /* materialize what is on the stack */
     for(idx = stk_paramcount-1; idx >= 0; --idx)
     {
-        tcg_out_qtrace_instrument_stk_setup(s, icontext, stack_offset[idx]); 
+        stack_currentsize -= stack_sbssize[idx];
+        tcg_out_qtrace_instrument_stk_setup(s, icontext, 
+                                            stack_vopcode[idx],
+                                            stack_voffset[idx], 
+                                            stack_sopcode[idx],
+                                            stack_currentsize);
     } 
 
     /* lastly, make the call */
@@ -2049,7 +2115,7 @@ static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *ic
     tcg_out_calli(s, (uintptr_t)ifun);
 
     /* need to fix up stack */
-    if (paramcount > regcount) tcg_out_addi(s, TCG_REG_ESP, 8*(paramcount-regcount));
+    if (paramcount > regcount) tcg_out_addi(s, TCG_REG_ESP, stack_totalsize);
 }
 
 

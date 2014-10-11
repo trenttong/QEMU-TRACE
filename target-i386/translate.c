@@ -380,28 +380,37 @@ static unsigned qtrace_get_register_size_and_offset(DisasContext *s,
     switch(regnum)
     {
     /* general purpose register */
-	case R_EAX : 
-	case R_ECX :
-	case R_EDX :
-	case R_EBX :
-	case R_ESP :
-	case R_EBP :
-	case R_ESI :
-	case R_EDI :
-	case R_R8  :
-	case R_R9  : 
-	case R_R10 :
-	case R_R11 :
-	case R_R12 :
-	case R_R13 :
-	case R_R14 :
-	case R_R15 :
-         *rmsize = sizeof(target_ulong)*8;
+	case QTRACE_X86_RAX ... QTRACE_X86_R15 : 
+         *rmsize = 64;
          *offset = offsetof(CPUX86State, regs[regnum]);
          break;
+    case QTRACE_X86_EAX ... QTRACE_X86_R15D: 
+         *rmsize = 32;
+         *offset = offsetof(CPUX86State, regs[regnum-QTRACE_X86_EAX]);
+         break;
+    case QTRACE_X86_AX ...  QTRACE_X86_R15W: 
+         *rmsize = 16;
+         *offset = offsetof(CPUX86State, regs[regnum-QTRACE_X86_AX]);
+         break;
+    case QTRACE_X86_AH ... QTRACE_X86_BH:
+         *rmsize = 8;
+         *offset = offsetof(CPUX86State, regs[regnum-QTRACE_X86_AH]);
+         break;
+    case QTRACE_X86_AL ... QTRACE_X86_R15B:
+         *rmsize = 8;
+         *offset = offsetof(CPUX86State, regs[regnum-QTRACE_X86_AL]);
+         break;
     /* program counter register */
-    case R_RIP :
-         *rmsize = sizeof(target_ulong)*8;
+    case QTRACE_X86_RIP :
+         *rmsize = 64;
+         goto pceip_offset;
+    case QTRACE_X86_EIP :
+         *rmsize = 32;
+         goto pceip_offset;
+    case QTRACE_X86_IP  :
+         *rmsize = 16;
+         goto pceip_offset;
+pceip_offset:
          *offset = offsetof(CPUX86State, eip);
          break;
     /* linear program counter register */
@@ -421,7 +430,7 @@ static unsigned qtrace_get_register_size_and_offset(DisasContext *s,
     case R_CR3 :
     case R_CR4 :
          *rmsize = sizeof(target_ulong)*8;
-         *offset = offsetof(CPUX86State, cr[regnum-R_RIP-1]);
+         ///*offset = offsetof(CPUX86State, cr[regnum-R_RIP-1]);
          break;
     case R_TSC:
          *rmsize = sizeof(uint64_t)*8;
@@ -460,7 +469,7 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
                  regidx = icontext->iargs[++idx];
                  qtrace_get_register_size_and_offset(s, regidx, &rmsize, &offset);
                  /* synchronize the pc if instrumenting it */
-                 if (regidx == R_RIP && QTRACE_PREINST(icontext)) gen_op_sync_preinst_pc(s); 
+                 if (regidx == QTRACE_X86_RIP && QTRACE_PREINST(icontext)) gen_op_sync_preinst_pc(s); 
                  if (regidx == R_LRIP && QTRACE_PREINST(icontext)) gen_op_sync_preinst_lpc(s); 
                  if (regidx == R_PRIP && QTRACE_PREINST(icontext)) gen_op_sync_preinst_ppc(s); 
                  /* create a register shadow if preinst instrumentation */
@@ -469,7 +478,8 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
                     tcg_gen_op2i(INDEX_op_qtrace_shadow_register, rmsize, offset);
                  }
                  /* override with frontend specific offset */
-                 icontext->iargs[idx] = offset;
+                 icontext->iargs[idx]   = offset;
+                 icontext->iargs[++idx] = log2(rmsize)-3;
                  break;
             /// ---------------------------------- ///
             /// memory trace
@@ -531,13 +541,13 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
                  /* register trace with R_RIP */
                  icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE;
                  icontext->iargs[idx+1] = R_LRIP;
-                 --idx;
+                 idx = idx - 2;
                  break;
             case QTRACE_PCTRACE_PMA:
                  /* register trace with R_RIP */
                  icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE;
                  icontext->iargs[idx+1] = R_PRIP;
-                 --idx;
+                 idx = idx - 2;
                  break;
             /// ---------------------------------- ///
             /// process ID trace.

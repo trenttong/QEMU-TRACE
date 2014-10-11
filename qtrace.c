@@ -242,10 +242,13 @@ void qtrace_instrument_parser(unsigned pos, ...)
       case QTRACE_REGTRACE_VALUE:
            ictxhead->iargs[ictxhead->ciarg++] = arg;
            ictxhead->iargs[ictxhead->ciarg++] = va_arg(arguments, unsigned);
+           /* reserve for instrumentation size */
+           RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictxhead);
            ++idx;
            break;
       case QTRACE_PCTRACE_VMA:
            ictxhead->iargs[ictxhead->ciarg++] = QTRACE_PCTRACE_VMA;
+           RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictxhead);
            RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictxhead);
            break;
       /// ---------------------------------- ///

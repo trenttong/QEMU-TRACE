@@ -24,52 +24,93 @@
 /// ------------------------------
 
 /* general purpose registers. */
-#define R_EAX 0
-#define R_ECX 1
-#define R_EDX 2
-#define R_EBX 3
-#define R_ESP 4
-#define R_EBP 5
-#define R_ESI 6
-#define R_EDI 7
-#define R_R8  8
-#define R_R9  9 
-#define R_R10 10
-#define R_R11 11
-#define R_R12 12
-#define R_R13 13
-#define R_R14 14
-#define R_R15 15
-#define R_RIP 16
-
-#define QTRACE_X86_RAX R_EAX
-#define QTRACE_X86_RCX R_ECX
-#define QTRACE_X86_RDX R_EDX
-#define QTRACE_X86_RBX R_EBX
-#define QTRACE_X86_RSP R_ESP
-#define QTRACE_X86_RBP R_EBP
-#define QTRACE_X86_RSI R_ESI
-#define QTRACE_X86_RDI R_EDI
-#define QTRACE_X86_R8  R_R8
-#define QTRACE_X86_R9  R_R9
-#define QTRACE_X86_R10 R_R10
-#define QTRACE_X86_R11 R_R11
-#define QTRACE_X86_R12 R_R12
-#define QTRACE_X86_R13 R_R13
-#define QTRACE_X86_R14 R_R14
-#define QTRACE_X86_R15 R_R15
-#define QTRACE_X86_RIP R_RIP
+// 64 bit.
+#define QTRACE_X86_RAX  0
+#define QTRACE_X86_RCX  1
+#define QTRACE_X86_RDX  2
+#define QTRACE_X86_RBX  3 
+#define QTRACE_X86_RSP  4
+#define QTRACE_X86_RBP  5 
+#define QTRACE_X86_RSI  6 
+#define QTRACE_X86_RDI  7 
+#define QTRACE_X86_R8   8 
+#define QTRACE_X86_R9   9
+#define QTRACE_X86_R10  10
+#define QTRACE_X86_R11  11
+#define QTRACE_X86_R12  12
+#define QTRACE_X86_R13  13
+#define QTRACE_X86_R14  14
+#define QTRACE_X86_R15  15
+#define QTRACE_X86_RIP  16 
+// 32 bit.
+#define QTRACE_X86_EAX  17 
+#define QTRACE_X86_ECX  18 
+#define QTRACE_X86_EDX  19 
+#define QTRACE_X86_EBX  20 
+#define QTRACE_X86_ESP  21 
+#define QTRACE_X86_EBP  22 
+#define QTRACE_X86_ESI  23 
+#define QTRACE_X86_EDI  24 
+#define QTRACE_X86_R8D  25 
+#define QTRACE_X86_R9D  26 
+#define QTRACE_X86_R10D 27 
+#define QTRACE_X86_R11D 28 
+#define QTRACE_X86_R12D 29 
+#define QTRACE_X86_R13D 30 
+#define QTRACE_X86_R14D 31 
+#define QTRACE_X86_R15D 32 
+#define QTRACE_X86_EIP  33 
+// 16 bit.
+#define QTRACE_X86_AX   34 
+#define QTRACE_X86_CX   35 
+#define QTRACE_X86_DX   36
+#define QTRACE_X86_BX   37
+#define QTRACE_X86_SP   38
+#define QTRACE_X86_BP   39
+#define QTRACE_X86_SI   40
+#define QTRACE_X86_DI   41 
+#define QTRACE_X86_R8W  42 
+#define QTRACE_X86_R9W  43 
+#define QTRACE_X86_R10W 44 
+#define QTRACE_X86_R11W 45 
+#define QTRACE_X86_R12W 46 
+#define QTRACE_X86_R13W 47 
+#define QTRACE_X86_R14W 48 
+#define QTRACE_X86_R15W 49 
+#define QTRACE_X86_IP   50 
+// 8 bit - higher half.
+#define QTRACE_X86_AH   51 
+#define QTRACE_X86_CH   52
+#define QTRACE_X86_DH   53
+#define QTRACE_X86_BH   54
+// 8 bit - lower half.
+#define QTRACE_X86_AL   55 
+#define QTRACE_X86_CL   56
+#define QTRACE_X86_DL   57
+#define QTRACE_X86_BL   58
+#define QTRACE_X86_SPL  59
+#define QTRACE_X86_BPL  60
+#define QTRACE_X86_SIL  61
+#define QTRACE_X86_DIL  62
+#define QTRACE_X86_R8B  63
+#define QTRACE_X86_R9B  64
+#define QTRACE_X86_R10B 65
+#define QTRACE_X86_R11B 66
+#define QTRACE_X86_R12B 67
+#define QTRACE_X86_R13B 68
+#define QTRACE_X86_R14B 69
+#define QTRACE_X86_R15B 70
 
 /* arcitecturally invisible register */
-#define R_LRIP 17
-#define R_PRIP 18
+#define R_LRIP 100 
+#define R_PRIP 102 
 
 /* control register. */
-#define R_CR0 19
-#define R_CR1 20
-#define R_CR2 21
-#define R_CR3 22 
-#define R_CR4 23
+#define R_CR0 109 
+#define R_CR1 103
+#define R_CR2 104
+#define R_CR3 105
+#define R_CR4 106
 
 #define QTRACE_X86_CR0 R_CR0
 #define QTRACE_X86_CR1 R_CR1
@@ -78,7 +119,7 @@
 #define QTRACE_X86_CR4 R_CR4
 
 /* timestamp counter register */
-#define R_TSC 24
+#define R_TSC 107 
 #define QTRACE_X86_TSC R_TSC
 
 /// ------------------------------
