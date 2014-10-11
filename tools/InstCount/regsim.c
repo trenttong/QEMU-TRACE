@@ -28,17 +28,17 @@ static void RegSimPrint##size(type rax,                           \
                               type r13,                           \
                               type r14,                           \
                               type r15,                           \
-                              type rip,                           \
-                              const char* name)                   \
+                              type rip)                           \
 {                                                                 \
-    printf("%s: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\t"        \
+    printf("0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\t"            \
            "0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",      \
-            name, rax, rcx, rdx, rbx, rsp,                        \
+            rax, rcx, rdx, rbx, rsp,                              \
             rbp, rsi, rdi, r8,  r9,                               \
             r10, r11, r12, r13, r14,                              \
             r15, rip);                                            \
 }
 
+RegSimPrint(8,  uint8_t,  regsim8name);
 RegSimPrint(16, uint16_t, regsim16name);
 RegSimPrint(32, uint32_t, regsim32name);
 RegSimPrint(64, uint64_t, regsim64name);
@@ -95,12 +95,34 @@ static void RegSim##position##Inst(uint64_t rax,                  \
                                    uint16_t r13w,                 \
                                    uint16_t r14w,                 \
                                    uint16_t r15w,                 \
-                                   uint16_t ip)                   \
+                                   uint16_t ip,                   \
+                                   uint8_t  al,                   \
+                                   uint8_t  cl,                   \
+                                   uint8_t  dl,                   \
+                                   uint8_t  bl,                   \
+                                   uint8_t  spl,                  \
+                                   uint8_t  bpl,                  \
+                                   uint8_t  sil,                  \
+                                   uint8_t  dil,                  \
+                                   uint8_t  r8b,                  \
+                                   uint8_t  r9b,                  \
+                                   uint8_t  r10b,                 \
+                                   uint8_t  r11b,                 \
+                                   uint8_t  r12b,                 \
+                                   uint8_t  r13b,                 \
+                                   uint8_t  r14b,                 \
+                                   uint8_t  r15b,                 \
+                                   uint8_t  ah,                   \
+                                   uint8_t  ch,                   \
+                                   uint8_t  dh,                   \
+                                   uint8_t  bh)                   \
                                                                   \
 {                                                                 \
-   RegSim64(rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15, rip);          \
-   RegSim64(eax, ecx, edx, ebx, esp, ebp, esi, edi, r8d, r9d, r10d, r11d, r12d, r13d, r14d, r15d, eip);  \
-   RegSim16(ax, cx, dx, bx, sp, bp, si, di, r8w, r9w, r10w, r11w, r12w, r13w, r14w, r15w, ip);           \
+   RegSimPrint64(rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15, rip);          \
+   RegSimPrint32(eax, ecx, edx, ebx, esp, ebp, esi, edi, r8d, r9d, r10d, r11d, r12d, r13d, r14d, r15d, eip);  \
+   RegSimPrint16(ax, cx, dx, bx, sp, bp, si, di, r8w, r9w, r10w, r11w, r12w, r13w, r14w, r15w, ip);           \
+   RegSimPrint8(al, cl, dl, bl, spl, bpl, sil, dil, r8b, r9b, r10b, r11b, r12b, r13b, r14b, r15b, 0);         \
+   RegSimPrint8(ah, ch, dh, bh,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);                                        \
 }
 
 RegSimInst(Pre)
@@ -214,6 +236,46 @@ void InstructionCallBack(unsigned type)
                                   QTRACE_X86_R15W,
                                   QTRACE_REGTRACE_VALUE,
                                   QTRACE_X86_IP,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_AL,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_CL,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_DL,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_BL,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_SPL,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_BPL,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_SIL,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_DIL,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_R8B,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_R9B,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_R10B,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_R11B,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_R12B,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_R13B,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_R14B,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_R15B,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_AH,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_CH,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_DH,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_BH,
                                   QTRACE_END_ARG);
 
     QTRACE_INSTRUCTION_INSTRUMENT(QTRACE_BEGIN_ARG,
@@ -321,7 +383,48 @@ void InstructionCallBack(unsigned type)
                                   QTRACE_X86_R15W,
                                   QTRACE_REGTRACE_VALUE,
                                   QTRACE_X86_IP,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_AL,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_CL,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_DL,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_BL,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_SPL,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_BPL,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_SIL,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_DIL,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_R8B,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_R9B,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_R10B,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_R11B,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_R12B,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_R13B,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_R14B,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_R15B,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_AH,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_CH,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_DH,
+                                  QTRACE_REGTRACE_VALUE,
+                                  QTRACE_X86_BH,
                                   QTRACE_END_ARG);
+
 }
 
 void StatsReset() { printf("REGSIM: StatsReset\n"); }

@@ -95,7 +95,7 @@
 /// ------------------------------------------- 
 /// general facility.
 /// ------------------------------------------- 
-#define QTRACE_MAX_ARGS                             (128)
+#define QTRACE_MAX_ARGS                             (1024)
 #define QTRACE_IFUN                                 (1<<0)
 #define QTRACE_IPOINT_BEFORE                        (1<<1)
 #define QTRACE_IPOINT_AFTER                         (1<<2)

@@ -1933,7 +1933,7 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, bool is64)
 static inline void tcg_out_qtrace_instrument_reg_setup(TCGContext *s, 
                                                        InstrumentContext *icontext, 
                                                        uint32_t regnum, 
-                                                       uint32_t vopcode, 
+                                                       uint64_t vmask, 
                                                        uint32_t voffset)
 {
     /* load from the shadow area */
@@ -1943,22 +1943,26 @@ static inline void tcg_out_qtrace_instrument_reg_setup(TCGContext *s,
                                offsetof(CPUArchState, shadowcpu_offset), 
                                0, MO_Q);
         tgen_arithr(s, ARITH_ADD + P_REXW, TCG_REG_RAX, TCG_AREG0);
-        tcg_out_modrm_offset(s, vopcode, 
+        /* load a full 64-bit value */
+        tcg_out_modrm_offset(s, OPC_MOVL_GvEv + P_REXW, 
                              tcg_target_call_iarg_regs[regnum], 
                              TCG_REG_RAX, voffset);		
-
+        /* mask off the uncessary portion */
+        tgen_arithi(s, ARITH_AND + P_REXW, tcg_target_call_iarg_regs[regnum], vmask, 0);
         goto reg_argument_setup;
     }
 
-    tcg_out_modrm_offset(s, vopcode, tcg_target_call_iarg_regs[regnum], 
+    tcg_out_modrm_offset(s, OPC_MOVL_GvEv + P_REXW, tcg_target_call_iarg_regs[regnum], 
                          TCG_AREG0, voffset);		
+    /* mask off the uncessary portion */
+    tgen_arithi(s, ARITH_AND + P_REXW, tcg_target_call_iarg_regs[regnum], vmask, 0);
 reg_argument_setup:
     return;
 }
 
 static inline void tcg_out_qtrace_instrument_stk_setup(TCGContext *s, 
                                                        InstrumentContext *icontext, 
-                                                       uint32_t vopcode, 
+                                                       uint64_t vmask, 
                                                        uint32_t voffset, 
                                                        uint32_t sopcode,
                                                        uint32_t soffset)
@@ -1970,12 +1974,18 @@ static inline void tcg_out_qtrace_instrument_stk_setup(TCGContext *s,
                                offsetof(CPUArchState, shadowcpu_offset), 
                                0, MO_Q);
         tgen_arithr(s, ARITH_ADD + P_REXW, TCG_REG_RAX, TCG_AREG0);
-        tcg_out_modrm_offset(s, vopcode, TCG_REG_RAX, TCG_REG_RAX, voffset);		
+        /* load a full 64-bit value */
+        tcg_out_modrm_offset(s, OPC_MOVL_GvEv + P_REXW, TCG_REG_RAX, TCG_REG_RAX, voffset);		
+        /* mask off the uncessary portion */
+        tgen_arithi(s, ARITH_AND + P_REXW, TCG_REG_RAX, vmask, 0);
         tcg_out_modrm_offset(s, sopcode, TCG_REG_RAX, TCG_REG_RSP, soffset);		
         goto stk_argument_setup;
     }
 
-    tcg_out_modrm_offset(s, vopcode, TCG_REG_RAX, TCG_AREG0,   voffset);		
+    /* load a full 64-bit value */
+    tcg_out_modrm_offset(s, OPC_MOVL_GvEv + P_REXW, TCG_REG_RAX, TCG_AREG0, voffset);		
+    /* mask off the uncessary portion */
+    tgen_arithi(s, ARITH_AND + P_REXW, TCG_REG_RAX, vmask, 0);
     tcg_out_modrm_offset(s, sopcode, TCG_REG_RAX, TCG_REG_RSP, soffset);		
 stk_argument_setup:
     return;
@@ -1983,26 +1993,26 @@ stk_argument_setup:
 
 static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *icontext)
 {
-    int idx = 0;
-    const int regcount = sizeof(tcg_target_call_iarg_regs)/sizeof(int);
-    unsigned  currreg = 0, ciarg = icontext->ciarg, paramcount = 0;
-    unsigned stack_vopcode[QTRACE_MAX_IARGS];
-    unsigned stack_voffset[QTRACE_MAX_IARGS];
-    unsigned stack_sopcode[QTRACE_MAX_IARGS];
-    unsigned stack_sbssize[QTRACE_MAX_IARGS];
+    uint32_t regcount = sizeof(tcg_target_call_iarg_regs)/sizeof(int);
+    uint32_t currreg = 0, ciarg = icontext->ciarg, paramcount = 0;
 
     uint32_t stack_totalsize = 0, stack_currentsize = 0;
-    
-    unsigned stk_paramcount = 0;
-    int bmemop;
-    int vopcode = 0, sopcode = 0;
-    char prefix = 0;;
+    uint32_t stk_paramcount = 0;
+    uint32_t bmemop  = 0;
+    uint32_t sopcode = 0;
 
-    memset(stack_vopcode, 0, sizeof(unsigned)*QTRACE_MAX_IARGS);
+    uint64_t vmask = 0;
+    uint64_t stack_vmask[QTRACE_MAX_IARGS];
+    uint32_t stack_voffset[QTRACE_MAX_IARGS];
+    uint32_t stack_sopcode[QTRACE_MAX_IARGS];
+    uint32_t stack_sbssize[QTRACE_MAX_IARGS];
+
+    memset(stack_vmask, 0, sizeof(uint64_t)*QTRACE_MAX_IARGS);
     memset(stack_voffset, 0, sizeof(unsigned)*QTRACE_MAX_IARGS);
     memset(stack_sopcode, 0, sizeof(unsigned)*QTRACE_MAX_IARGS);
     memset(stack_sbssize, 0, sizeof(unsigned)*QTRACE_MAX_IARGS);
-    
+
+    int32_t idx = 0;
     /* first 6 integral arguments go into registers. */
     /* if more than 6 integral parameters, then pass rest on stack */
     for(idx = 0, currreg=0; idx<ciarg; ++idx)
@@ -2049,20 +2059,28 @@ static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *ic
         switch(bmemop)
         {
         case MO_64:
-             vopcode = OPC_MOVL_GvEv + P_REXW;
+             /* load 64 bit from the cpustate and 
+                push 64 bit onto the stack */
+             vmask = (uint64_t)(-1);
              sopcode = OPC_MOVL_EvGv + P_REXW; 
              break;
         case MO_32:
-             vopcode = OPC_MOVL_GvEv;
+             /* load 32 bit from the cpustate and 
+                push 64 bit onto the stack */
+             vmask = (uint32_t)(-1);
              sopcode = OPC_MOVL_EvGv + P_REXW; 
              break;
         case MO_16:
-             vopcode = OPC_MOVB_GvEv;
-             sopcode = OPC_MOVB_EvGv + P_REXW; 
+             /* load 16 bit from the cpustate and 
+                push 64 bit onto the stack */
+             vmask = (uint16_t)(-1);
+             sopcode = OPC_MOVL_EvGv + P_REXW; 
              break;
         case MO_8:
-             vopcode = OPC_MOVB_GvEv;
-             sopcode = OPC_MOVB_EvGv + P_REXW; 
+             /* load 8 bit from the cpustate and 
+                push 64 bit onto the stack */
+             vmask = (uint8_t)(-1);
+             sopcode = OPC_MOVL_EvGv + P_REXW; 
              break;
         default:
              QTRACE_ERROR("unknown register size");
@@ -2076,11 +2094,11 @@ static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *ic
             tcg_out_qtrace_instrument_reg_setup(s, 
                                                 icontext, 
                                                 currreg++, 
-                                                vopcode, 
+                                                vmask, 
                                                 voffset);
         } else {
             /* this one goes onto the stack */
-            stack_vopcode[stk_paramcount] = vopcode;
+            stack_vmask[stk_paramcount] = vmask;
             stack_voffset[stk_paramcount] = voffset;
             stack_sopcode[stk_paramcount] = sopcode;
             stack_sbssize[stk_paramcount] = 8;
@@ -2102,7 +2120,7 @@ static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *ic
     {
         stack_currentsize -= stack_sbssize[idx];
         tcg_out_qtrace_instrument_stk_setup(s, icontext, 
-                                            stack_vopcode[idx],
+                                            stack_vmask[idx],
                                             stack_voffset[idx], 
                                             stack_sopcode[idx],
                                             stack_currentsize);

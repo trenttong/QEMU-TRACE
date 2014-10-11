@@ -381,24 +381,30 @@ static unsigned qtrace_get_register_size_and_offset(DisasContext *s,
     {
     /* general purpose register */
 	case QTRACE_X86_RAX ... QTRACE_X86_R15 : 
+         /* load 64 bits */
          *rmsize = 64;
          *offset = offsetof(CPUX86State, regs[regnum]);
          break;
     case QTRACE_X86_EAX ... QTRACE_X86_R15D: 
+         /* load 32 bits */
          *rmsize = 32;
          *offset = offsetof(CPUX86State, regs[regnum-QTRACE_X86_EAX]);
          break;
     case QTRACE_X86_AX ...  QTRACE_X86_R15W: 
+         /* load 16 bits */
          *rmsize = 16;
          *offset = offsetof(CPUX86State, regs[regnum-QTRACE_X86_AX]);
          break;
-    case QTRACE_X86_AH ... QTRACE_X86_BH:
-         *rmsize = 8;
-         *offset = offsetof(CPUX86State, regs[regnum-QTRACE_X86_AH]);
-         break;
     case QTRACE_X86_AL ... QTRACE_X86_R15B:
+         /* load 8 bits */
          *rmsize = 8;
          *offset = offsetof(CPUX86State, regs[regnum-QTRACE_X86_AL]);
+         break;
+    case QTRACE_X86_AH ... QTRACE_X86_BH:
+         /* load 8 bits. unaligned load ! */
+         /* x86 is little endian */
+         *rmsize = 8;
+         *offset = offsetof(CPUX86State, regs[regnum-QTRACE_X86_AH])+1;
          break;
     /* program counter register */
     case QTRACE_X86_RIP :

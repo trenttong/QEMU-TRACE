@@ -78,28 +78,28 @@
 #define QTRACE_X86_R14W 48 
 #define QTRACE_X86_R15W 49 
 #define QTRACE_X86_IP   50 
-// 8 bit - higher half.
-#define QTRACE_X86_AH   51 
-#define QTRACE_X86_CH   52
-#define QTRACE_X86_DH   53
-#define QTRACE_X86_BH   54
 // 8 bit - lower half.
-#define QTRACE_X86_AL   55 
-#define QTRACE_X86_CL   56
-#define QTRACE_X86_DL   57
-#define QTRACE_X86_BL   58
-#define QTRACE_X86_SPL  59
-#define QTRACE_X86_BPL  60
-#define QTRACE_X86_SIL  61
-#define QTRACE_X86_DIL  62
-#define QTRACE_X86_R8B  63
-#define QTRACE_X86_R9B  64
-#define QTRACE_X86_R10B 65
-#define QTRACE_X86_R11B 66
-#define QTRACE_X86_R12B 67
-#define QTRACE_X86_R13B 68
-#define QTRACE_X86_R14B 69
-#define QTRACE_X86_R15B 70
+#define QTRACE_X86_AL   51
+#define QTRACE_X86_CL   52
+#define QTRACE_X86_DL   53
+#define QTRACE_X86_BL   54
+#define QTRACE_X86_SPL  55
+#define QTRACE_X86_BPL  56
+#define QTRACE_X86_SIL  57
+#define QTRACE_X86_DIL  58
+#define QTRACE_X86_R8B  59
+#define QTRACE_X86_R9B  60
+#define QTRACE_X86_R10B 61
+#define QTRACE_X86_R11B 62
+#define QTRACE_X86_R12B 63
+#define QTRACE_X86_R13B 64
+#define QTRACE_X86_R14B 65
+#define QTRACE_X86_R15B 66
+// 8 bit - higher half.
+#define QTRACE_X86_AH   67 
+#define QTRACE_X86_CH   68
+#define QTRACE_X86_DH   69
+#define QTRACE_X86_BH   70
 
 /* arcitecturally invisible register */
 #define R_LRIP 100 
