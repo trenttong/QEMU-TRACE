@@ -11,6 +11,7 @@ const char *regsim16name = "RegSimPrint16";
 const char *regsim32name = "RegSimPrint32";
 const char *regsim64name = "RegSimPrint64";
 
+#if REG_PRINT != 0
 #define RegSimPrint(size, type, name)                             \
 static void RegSimPrint##size(type rax,                           \
                               type rcx,                           \
@@ -37,6 +38,30 @@ static void RegSimPrint##size(type rax,                           \
             r10, r11, r12, r13, r14,                              \
             r15, rip);                                            \
 }
+
+#else 
+
+#define RegSimPrint(size, type, name)                             \
+static void RegSimPrint##size(type rax,                           \
+                              type rcx,                           \
+                              type rdx,                           \
+                              type rbx,                           \
+                              type rsp,                           \
+                              type rbp,                           \
+                              type rsi,                           \
+                              type rdi,                           \
+                              type r8,                            \
+                              type r9,                            \
+                              type r10,                           \
+                              type r11,                           \
+                              type r12,                           \
+                              type r13,                           \
+                              type r14,                           \
+                              type r15,                           \
+                              type rip)                           \
+{                                                                 \
+}
+#endif
 
 RegSimPrint(8,  uint8_t,  regsim8name);
 RegSimPrint(16, uint16_t, regsim16name);

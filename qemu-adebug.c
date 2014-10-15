@@ -56,9 +56,13 @@ static inline void handle_connection_##cmd(DebugChannel *channel,   \
                                            const char *mname,       \
                                            bool *valid)             \
 {                                                                   \
+   /* lock the channel */                                           \
+   QTRACE_CHANNEL_LOCK(&channel->lock);                             \
    if (fname) memcpy(channel->fname, fname, strlen(fname));         \
    if (mname) memcpy(channel->mname, mname, strlen(mname));         \
    channel->var = 1;                                                \
+   /* unlock the channel */                                         \
+   QTRACE_CHANNEL_UNLOCK(&channel->lock);                           \
    QTRACE_WAIT_COMMAND_HANDLED(channel->var);                       \
    *valid = true;                                                   \
 } 

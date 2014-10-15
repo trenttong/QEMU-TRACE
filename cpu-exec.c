@@ -55,6 +55,8 @@ void cpu_resume_from_signal(CPUArchState *env, void *puc)
 /* asynchronous debug channel */
 static inline void qtrace_cpu_handle_cmds(CPUArchState *cpu)
 {
+    /* lock the channel */
+    QTRACE_CHANNEL_LOCK(&channel->lock);
     if (channel->flushcc) tb_flush(cpu);
     if (channel->client_reset_all) qtrace_invoke_client_from_list(NULL,
                                                                   ResetStatsNameString,
@@ -73,6 +75,9 @@ static inline void qtrace_cpu_handle_cmds(CPUArchState *cpu)
                                                               printstats_list);
     /* done. reset the channel */
     memset(channel, 0, sizeof(DebugChannel));
+
+    /* unlock the channel */
+    QTRACE_CHANNEL_UNLOCK(&channel->lock);
 }
 
 

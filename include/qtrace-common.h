@@ -22,12 +22,15 @@
 
 #include <stdint.h> 
 #include <stdlib.h>
+#include <pthread.h>
 
 /// ------------------------------------------------ ///
 /// miscellaneous 
 /// ------------------------------------------------ ///
 #define QTRACE_EXIT             exit
 #define QTRACE_ERROR            printf
+#define QTRACE_CHANNEL_LOCK     pthread_mutex_lock
+#define QTRACE_CHANNEL_UNLOCK   pthread_mutex_unlock
 #define QTRACE_WAIT_COMMAND_HANDLED(X)  while(!X);
 #define QTRACE_LOCAL_FUN        static
 #define QTRACE_MAX_IARGS        256 
@@ -82,9 +85,10 @@ typedef struct InstrumentContext  {
 /// qtrace asynchronous debug channel. 
 /// ------------------------------------------------ ///
 typedef struct {
-    int client_userd;     /* user defined function request */
-    int client_reset;     /* reset stats function request */ 
-    int client_print;     /* print stats function request */
+    pthread_mutex_t lock;     /* exclusive access to channel variables */
+    int client_userd;         /* user defined function request */
+    int client_reset;         /* reset stats function request */ 
+    int client_print;         /* print stats function request */
     int client_reset_all;
     int client_print_all;
     int flushcc;
