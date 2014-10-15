@@ -757,8 +757,6 @@ typedef struct CPUX86State {
     /* standard registers */
     target_ulong regs[CPU_NB_REGS];
     target_ulong eip;
-    target_ulong linear_eip;
-    hwaddr phys_eip;
     target_ulong eflags; /* eflags register. During CPU emulation, CC
                         flags and DF are set to zero because they are
                         stored elsewhere */
@@ -920,6 +918,11 @@ typedef struct CPUX86State {
     uint64_t xcr0;
 
     TPRAccess tpr_access_type;
+
+    /* QTRACE - hidden register states */
+    target_ulong linear_eip;
+    target_ulong branch_eip;
+    hwaddr phys_eip;
 
     /* QTRACE - register shadowing */
     struct CPUX86State *shadowcpu;

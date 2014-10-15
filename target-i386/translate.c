@@ -372,6 +372,13 @@ static inline void gen_op_sync_preinst_ppc(DisasContext *s)
     gen_op_sync_ppc(s->phys_pc_start);
 }
 
+static inline void gen_op_sync_bpc(DisasContext *s)
+{
+    tcg_gen_ld_tl(cpu_tmp0, cpu_env, offsetof(CPUX86State, eip));
+    tcg_gen_st_tl(cpu_tmp0, cpu_env, offsetof(CPUX86State, branch_eip));
+}
+
+
 static unsigned qtrace_get_register_size_and_offset(DisasContext *s, 
                                                     unsigned  regnum, 
                                                     unsigned *rmsize, 
@@ -418,6 +425,11 @@ static unsigned qtrace_get_register_size_and_offset(DisasContext *s,
          goto pceip_offset;
 pceip_offset:
          *offset = offsetof(CPUX86State, eip);
+         break;
+    /* post branch program counter register */
+    case R_BRIP:
+         *rmsize = sizeof(target_ulong)*8;
+         *offset = offsetof(CPUX86State, branch_eip);
          break;
     /* linear program counter register */
     case R_LRIP :
@@ -478,6 +490,8 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
                  if (regidx == QTRACE_X86_RIP && QTRACE_PREINST(icontext)) gen_op_sync_preinst_pc(s); 
                  if (regidx == R_LRIP && QTRACE_PREINST(icontext)) gen_op_sync_preinst_lpc(s); 
                  if (regidx == R_PRIP && QTRACE_PREINST(icontext)) gen_op_sync_preinst_ppc(s); 
+                 /* copy the updated pc to branch pc */
+                 if (regidx == R_BRIP) gen_op_sync_bpc(s);
                  /* create a register shadow if preinst instrumentation */
                  if (QTRACE_PREINST(icontext))
                  {
@@ -554,6 +568,15 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
                  icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE;
                  icontext->iargs[idx+1] = R_PRIP;
                  idx = idx - 2;
+                 break;
+            /// ---------------------------------- ///
+            /// branch trace.
+            /// ---------------------------------- ///
+            case QTRACE_BRANCHTRACE_TARGET:
+                 /* get the branch target address*/
+                 icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE;
+                 icontext->iargs[idx+1] = R_BRIP;
+                 idx = idx - 1;
                  break;
             /// ---------------------------------- ///
             /// process ID trace.

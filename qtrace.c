@@ -252,6 +252,14 @@ void qtrace_instrument_parser(unsigned pos, ...)
            RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictxhead);
            break;
       /// ---------------------------------- ///
+      //// branch trace. */
+      /// ---------------------------------- ///
+      case QTRACE_BRANCHTRACE_TARGET:
+           ictxhead->iargs[ictxhead->ciarg++] = arg;
+           RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictxhead);
+           RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictxhead);
+           break;
+      /// ---------------------------------- ///
       ////process unique id instrumentation */
       /// ---------------------------------- ///
       case QTRACE_PROCESS_UPID:
