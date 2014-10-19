@@ -207,8 +207,27 @@ void qtrace_instrument_parser(unsigned pos, ...)
 
    InstrumentContext *ictxhead = rootarray[CURRENT_ROOT];
 
+   
+   /* 
+      stage 1.
+      setup necessary instrumentation types as well as their frontend agonistic 
+      parameters and slots. this setup is then interpreted and modified by 
+      different frontend before invoking the TCG on them.
+      
+      stage 2.
+      e.g. when encountering QTRACE_REGTRACE_VALUE. QTRACE_REGTRACE_VALUE. becomes
+      the first parameter in the instrumentation context argument. then this 
+      function reserves 2 more slots - 1 for the name of the register and
+      another for the size of the instrumentation.
+
+      stage 3.
+      frontend looks at the name of the register and figure out its instrumentation
+      offset as well as the instrumentation size. this information is then recorded
+      in the same place in the icontext structure and passed to the backend. 
+   */
+
    unsigned idx=0;
-   for (idx=0;idx<pos;idx++) 
+   for (idx=0;idx<pos;++idx) 
    {
       unsigned arg = va_arg(arguments, unsigned);
       switch (arg)
@@ -225,6 +244,27 @@ void qtrace_instrument_parser(unsigned pos, ...)
            ++idx;
            break;
       /// ---------------------------------- ///
+      //// register trace. */
+      /// ---------------------------------- ///
+      case QTRACE_REGTRACE_VALUE:
+           ictxhead->iargs[ictxhead->ciarg++] = arg;
+           /* this will be modified into offset by frontends */
+           ictxhead->iargs[ictxhead->ciarg++] = va_arg(arguments, unsigned);
+           /* reserve for instrumentation size */
+           RESERVE_INSTRUMENT_CONTEXT_ARG_BASIZE(ictxhead);
+           break;
+      /// ---------------------------------- ///
+      //// miscellaneous register trace. */
+      /// ---------------------------------- ///
+      case QTRACE_PROCESS_UPID:
+      case QTRACE_PCTRACE_VMA:
+      case QTRACE_BRANCHTRACE_TARGET:
+           /* shall be converted to regtrace in the frontend */
+           ictxhead->iargs[ictxhead->ciarg++] = arg;
+           RESERVE_INSTRUMENT_CONTEXT_ARG_OFFSET(ictxhead);
+           RESERVE_INSTRUMENT_CONTEXT_ARG_BASIZE(ictxhead);
+           break;
+      /// ---------------------------------- ///
       /// memory address instrumentation */
       /// ---------------------------------- ///
       case QTRACE_MEMTRACE_FETCH_VMA:
@@ -235,35 +275,9 @@ void qtrace_instrument_parser(unsigned pos, ...)
       case QTRACE_MEMTRACE_STORE_PMA:
       case QTRACE_MEMTRACE_STORE_VPMA:
       case QTRACE_MEMTRACE_STORE_MSIZE:
-           ictxhead->iargs[ictxhead->ciarg++] = arg;
-           RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictxhead);
            ictxhead->memfext |= arg;
-           break;
-      case QTRACE_REGTRACE_VALUE:
            ictxhead->iargs[ictxhead->ciarg++] = arg;
-           ictxhead->iargs[ictxhead->ciarg++] = va_arg(arguments, unsigned);
-           /* reserve for instrumentation size */
-           RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictxhead);
-           ++idx;
-           break;
-      case QTRACE_PCTRACE_VMA:
-           ictxhead->iargs[ictxhead->ciarg++] = QTRACE_PCTRACE_VMA;
-           RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictxhead);
-           RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictxhead);
-           break;
-      /// ---------------------------------- ///
-      //// branch trace. */
-      /// ---------------------------------- ///
-      case QTRACE_BRANCHTRACE_TARGET:
-           ictxhead->iargs[ictxhead->ciarg++] = arg;
-           RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictxhead);
-           RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictxhead);
-           break;
-      /// ---------------------------------- ///
-      ////process unique id instrumentation */
-      /// ---------------------------------- ///
-      case QTRACE_PROCESS_UPID:
-           ictxhead->iargs[ictxhead->ciarg++] = arg;
+           RESERVE_INSTRUMENT_CONTEXT_ARG_OFFSET(ictxhead);
            break;
       /// ---------------------------------- ///
       ////memory value instrumentation */

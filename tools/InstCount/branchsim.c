@@ -9,18 +9,23 @@
 
 #define target_ulong long unsigned int
 
-void BranchSim(target_ulong beip)
+void BranchSim(target_ulong prip, target_ulong beip)
 {
-    printf("BRANCHSIM: 0x%lx\n", beip); 
+    printf("BRANCHSIM: 0x%lx 0x%lx\n", prip, beip); 
 }
 
 void InstructionCallBack(unsigned type)
 {
-    QTRACE_INSTRUCTION_INSTRUMENT(QTRACE_BEGIN_ARG,
-                                  QTRACE_IPOINT_BEFORE, 
-                                  QTRACE_IFUN, BranchSim, 
-                                  QTRACE_BRANCHTRACE_TARGET,
-                                  QTRACE_END_ARG);
+    if (QTRACE_TEST_JMP(type))
+    {
+      QTRACE_INSTRUCTION_INSTRUMENT(QTRACE_BEGIN_ARG,
+                                    QTRACE_IPOINT_BEFORE, 
+                                    QTRACE_IFUN, BranchSim, 
+                                    QTRACE_REGTRACE_VALUE,
+                                    QTRACE_X86_RIP, 
+                                    QTRACE_BRANCHTRACE_TARGET,
+                                    QTRACE_END_ARG);
+    }
     return;
 }
 

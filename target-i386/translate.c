@@ -125,7 +125,6 @@ do                                                                      \
 {  /* generate the pre & post inst  instrumentation */                  \
    InstrumentContext *ictx = qtrace_get_current_icontext_list();        \
    tcg_gen_op1i(INDEX_op_qtrace_instrumentation, (uintptr_t)ictx);      \
-   if (qtrace_has_instrument(ictx, QTRACE_IPOINT_AFTER)) gen_op_sync_pstinst_pc(s); \
    ictx = NULL;                                                         \
 }                                                                       \
 while(0);
@@ -378,8 +377,7 @@ static inline void gen_op_sync_bpc(DisasContext *s)
     tcg_gen_st_tl(cpu_tmp0, cpu_env, offsetof(CPUX86State, branch_eip));
 }
 
-
-static unsigned qtrace_get_register_size_and_offset(DisasContext *s, 
+static unsigned qtrace_get_reg_size_and_offset(DisasContext *s, 
                                                     unsigned  regnum, 
                                                     unsigned *rmsize, 
                                                     unsigned *offset)
@@ -387,7 +385,7 @@ static unsigned qtrace_get_register_size_and_offset(DisasContext *s,
     switch(regnum)
     {
     /* general purpose register */
-	case QTRACE_X86_RAX ... QTRACE_X86_R15 : 
+	 case QTRACE_X86_RAX ... QTRACE_X86_R15 : 
          /* load 64 bits */
          *rmsize = 64;
          *offset = offsetof(CPUX86State, regs[regnum]);
@@ -484,22 +482,38 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
             /// register trace
             /// ---------------------------------- ///
             case QTRACE_REGTRACE_VALUE:
-                 regidx = icontext->iargs[++idx];
-                 qtrace_get_register_size_and_offset(s, regidx, &rmsize, &offset);
-                 /* synchronize the pc if instrumenting it */
-                 if (regidx == QTRACE_X86_RIP && QTRACE_PREINST(icontext)) gen_op_sync_preinst_pc(s); 
-                 if (regidx == R_LRIP && QTRACE_PREINST(icontext)) gen_op_sync_preinst_lpc(s); 
-                 if (regidx == R_PRIP && QTRACE_PREINST(icontext)) gen_op_sync_preinst_ppc(s); 
-                 /* copy the updated pc to branch pc */
-                 if (regidx == R_BRIP) gen_op_sync_bpc(s);
+                 regidx = icontext->iargs[idx+1];
+                 qtrace_get_reg_size_and_offset(s, regidx, 
+                                                &icontext->iargs[idx], 
+                                                &icontext->iargs[idx+1]);
                  /* create a register shadow if preinst instrumentation */
                  if (QTRACE_PREINST(icontext))
                  {
-                    tcg_gen_op2i(INDEX_op_qtrace_shadow_register, rmsize, offset);
+                    tcg_gen_op2i(INDEX_op_qtrace_shadow_register, 
+                                 &icontext->iargs[idx], 
+                                 &icontext->iargs[idx+1]);
                  }
-                 /* override with frontend specific offset */
-                 icontext->iargs[idx]   = offset;
-                 icontext->iargs[++idx] = log2(rmsize)-3;
+                 ++idx;
+                 break;
+            /// ---------------------------------- ///
+            /// program counter trace. program counter 
+            /// gets converted into register trace.
+            /// ---------------------------------- ///
+            case QTRACE_PCTRACE_VMA:
+                 /* register trace with R_RIP */
+                 icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE;
+                 icontext->iargs[idx+1] = R_LRIP;   /* register to trace */
+                 icontext->iargs[idx+2] = 0;        /* size of register to trace */
+                 /* backup one argument and re-evaluate */
+                 --idx;
+                 break;
+            case QTRACE_PCTRACE_PMA:
+                 /* register trace with R_RIP */
+                 icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE;
+                 icontext->iargs[idx+1] = R_PRIP;   /* register to trace */
+                 icontext->iargs[idx+2] = 0;        /* size of register to trace */
+                 /* backup one argument and re-evaluate */
+                 --idx;
                  break;
             /// ---------------------------------- ///
             /// memory trace
@@ -555,28 +569,17 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
                  icontext->iargs[idx] = OFS(store_shadow.pstvalue);
                  break;
             /// ---------------------------------- ///
-            /// program counter trace.
-            /// ---------------------------------- ///
-            case QTRACE_PCTRACE_VMA:
-                 /* register trace with R_RIP */
-                 icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE;
-                 icontext->iargs[idx+1] = R_LRIP;
-                 idx = idx - 2;
-                 break;
-            case QTRACE_PCTRACE_PMA:
-                 /* register trace with R_RIP */
-                 icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE;
-                 icontext->iargs[idx+1] = R_PRIP;
-                 idx = idx - 2;
-                 break;
-            /// ---------------------------------- ///
             /// branch trace.
             /// ---------------------------------- ///
             case QTRACE_BRANCHTRACE_TARGET:
                  /* get the branch target address*/
                  icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE;
-                 icontext->iargs[idx+1] = R_BRIP;
+                 icontext->iargs[idx+1] = QTRACE_X86_RIP;
                  idx = idx - 1;
+                 if (QTRACE_PREINST(icontext))
+                 {
+                     QTRACE_ERROR("QTRACE_BRANCHTRACE_TARGET must have post instruction insertion point");
+                 }
                  break;
             /// ---------------------------------- ///
             /// process ID trace.
@@ -8788,9 +8791,15 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     default:
         goto illegal_op;
     }
+
     /* lock generation */
     if (s->prefix & PREFIX_LOCK)
         gen_helper_unlock();
+
+    /* QTRACE - update the post instruction pc if its not a jump. 
+       control flow instructions must have updated program counter */
+    if (!s->is_jmp) gen_op_sync_pstinst_pc(s);
+
     return s->pc;
  illegal_op:
     if (s->prefix & PREFIX_LOCK)
@@ -9110,3 +9119,14 @@ void restore_state_to_opc(CPUX86State *env, TranslationBlock *tb, int pc_pos)
     if (cc_op != CC_OP_DYNAMIC)
         env->cc_op = cc_op;
 }
+
+#if 0
+                 /* synchronize the pc if instrumenting it */
+                 if (regidx == QTRACE_X86_RIP && QTRACE_PREINST(icontext)) gen_op_sync_preinst_pc(s); 
+                 if (regidx == R_LRIP && QTRACE_PREINST(icontext)) gen_op_sync_preinst_lpc(s); 
+                 if (regidx == R_PRIP && QTRACE_PREINST(icontext)) gen_op_sync_preinst_ppc(s); 
+                 /* override with frontend specific offset */
+                 icontext->iargs[idx]   = offset;
+                 icontext->iargs[++idx] = log2(rmsize)-3;
+#endif
+

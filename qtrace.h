@@ -91,6 +91,8 @@
 #define QTRACE_ADD_COND_INST_TYPE_FLAG(s,flg,c)     {if(c) QTRACE_ADD_INST_TYPE_FLAG(s, flg);}
 #define QTRACE_SUB_COND_INST_TYPE_FLAG(s,flg,c)     {if(c) QTRACE_SUB_INST_TYPE_FLAG(s, flg);}
 #define RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictx)   {ictx->iargs[ictx->ciarg++] = 0;}
+#define RESERVE_INSTRUMENT_CONTEXT_ARG_OFFSET(ictx) RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictx); 
+#define RESERVE_INSTRUMENT_CONTEXT_ARG_BASIZE(ictx) RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictx);
 
 /// ------------------------------------------- 
 /// general facility.
