@@ -187,6 +187,17 @@ void qtrace_icontext_sanity_check(InstrumentContext *ictx)
 }
 
 
+/// @ qtrace calls instrumentation function after the instruction is emulated.
+/// @ as a result, qtrace shadows (backs up) any architectural states that are
+/// @ modified as a result of the currently instrumented instruction.
+/// @ this simplifies the modifications to the frontend, as now they only need 
+/// @ to be changed minimally, i.e. to create a TCG IR node to backup architectural
+/// @ states which are about to be modified.
+///
+/// @ for every instruction, there is a pre-inst instrumentation callback and
+/// @ a post-inst instrumentation callback. the instrumentation callbacks have
+/// @ 2 parts. in the first part, it allows qtrace to create any
+
 /// @ qtrace_instrument - this function is called by the instrumentatiom module.
 /// @ it parses what is requested by the instrumentation module into a icontext
 /// @ structure.
@@ -206,7 +217,6 @@ void qtrace_instrument_parser(unsigned pos, ...)
    qtrace_allocate_new_icontext(&rootarray[CURRENT_ROOT]);
 
    InstrumentContext *ictxhead = rootarray[CURRENT_ROOT];
-
    
    /* 
       stage 1.

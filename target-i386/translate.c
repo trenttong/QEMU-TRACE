@@ -493,11 +493,14 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
                                  &icontext->iargs[idx], 
                                  &icontext->iargs[idx+1]);
                  }
-                 ++idx;
+                 /* no need to create any IR for post-inst instrumentation.
+                    as they can simply load from the modified architectural
+                    states */
+                 /* advance 2 indices */
+                 idx = idx + 2;
                  break;
             /// ---------------------------------- ///
-            /// program counter trace. program counter 
-            /// gets converted into register trace.
+            /// miscellaneous instrumentation converted into register trace.
             /// ---------------------------------- ///
             case QTRACE_PCTRACE_VMA:
                  /* register trace with R_RIP */
@@ -511,6 +514,18 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
                  /* register trace with R_RIP */
                  icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE;
                  icontext->iargs[idx+1] = R_PRIP;   /* register to trace */
+                 icontext->iargs[idx+2] = 0;        /* size of register to trace */
+                 /* backup one argument and re-evaluate */
+                 --idx;
+                 break;
+            /// ---------------------------------- ///
+            /// process ID trace.
+            /// ---------------------------------- ///
+            case QTRACE_PROCESS_UPID:
+                 /* use CR[3] as the UPID on X86 */
+                 /* override with frontend specific offset */
+                 icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE;
+                 icontext->iargs[idx+1] = R_CR3;   /* register to trace */
                  icontext->iargs[idx+2] = 0;        /* size of register to trace */
                  /* backup one argument and re-evaluate */
                  --idx;
@@ -581,18 +596,9 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
                      QTRACE_ERROR("QTRACE_BRANCHTRACE_TARGET must have post instruction insertion point");
                  }
                  break;
-            /// ---------------------------------- ///
-            /// process ID trace.
-            /// ---------------------------------- ///
-            case QTRACE_PROCESS_UPID:
-                 /* use CR[3] as the UPID on X86 */
-                 /* override with frontend specific offset */
-                 icontext->iargs[++idx] = OFS(cr[3]);
-                 break;
             default:
                  break;
             } 
-            ++idx;
         }
         icontext = icontext->next;
     }
@@ -8798,7 +8804,11 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
 
     /* QTRACE - update the post instruction pc if its not a jump. 
        control flow instructions must have updated program counter */
-    if (!s->is_jmp) gen_op_sync_pstinst_pc(s);
+    if (!s->is_jmp)  {
+      gen_op_sync_pstinst_pc(s);
+      gen_op_sync_preinst_lpc(s);
+      gen_op_sync_preinst_ppc(s);
+    }
 
     return s->pc;
  illegal_op:
