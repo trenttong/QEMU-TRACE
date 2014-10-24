@@ -5,15 +5,18 @@
 #include "qtrace-client-header.h"
 #include <stdio.h>
 
-#define REG_PRINT 0
+#define REG_PRINT 1 
 
+const char *regsim8lname = "RegSimPrint8l";
+const char *regsim8hname = "RegSimPrint8h";
 const char *regsim16name = "RegSimPrint16";
 const char *regsim32name = "RegSimPrint32";
 const char *regsim64name = "RegSimPrint64";
 
 #if REG_PRINT != 0
 #define RegSimPrint(size, type, name)                             \
-static void RegSimPrint##size(type rax,                           \
+static void RegSimPrint##size(const char* name,                   \
+                              type rax,                           \
                               type rcx,                           \
                               type rdx,                           \
                               type rbx,                           \
@@ -31,18 +34,17 @@ static void RegSimPrint##size(type rax,                           \
                               type r15,                           \
                               type rip)                           \
 {                                                                 \
-    printf("0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\t"            \
-           "0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",      \
-            rax, rcx, rdx, rbx, rsp,                              \
-            rbp, rsi, rdi, r8,  r9,                               \
-            r10, r11, r12, r13, r14,                              \
-            r15, rip);                                            \
+    printf("%s %8x %8x %8x %8x %8x %8x %8x %8x %8x %8x %8x %8x %8x %8x %8x %8x %8x\n",       \
+           name, rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi, r8, r9,  \
+           r10, r11, r12, r13, r14,                               \
+           r15, rip);                                             \
 }
 
 #else 
 
 #define RegSimPrint(size, type, name)                             \
-static void RegSimPrint##size(type rax,                           \
+static void RegSimPrint##size(const char* name,                   \
+                              type rax,                           \
                               type rcx,                           \
                               type rdx,                           \
                               type rbx,                           \
@@ -69,7 +71,7 @@ RegSimPrint(32, uint32_t, regsim32name);
 RegSimPrint(64, uint64_t, regsim64name);
 #undef RegSimPrint
 
-#define RegSimInst(position)                                      \
+#define RegSimInst(position, misc)                                \
 static void RegSim##position##Inst(uint64_t rax,                  \
                                    uint64_t rcx,                  \
                                    uint64_t rdx,                  \
@@ -143,15 +145,24 @@ static void RegSim##position##Inst(uint64_t rax,                  \
                                    uint8_t  bh)                   \
                                                                   \
 {                                                                 \
-   RegSimPrint64(rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15, rip);          \
-   RegSimPrint32(eax, ecx, edx, ebx, esp, ebp, esi, edi, r8d, r9d, r10d, r11d, r12d, r13d, r14d, r15d, eip);  \
-   RegSimPrint16(ax, cx, dx, bx, sp, bp, si, di, r8w, r9w, r10w, r11w, r12w, r13w, r14w, r15w, ip);           \
-   RegSimPrint8(al, cl, dl, bl, spl, bpl, sil, dil, r8b, r9b, r10b, r11b, r12b, r13b, r14b, r15b, 0);         \
-   RegSimPrint8(ah, ch, dh, bh,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);                                        \
-}
+   printf("---- REGSIM: %s Instrumentation ---- \n", misc);       \
+   RegSimPrint64(regsim64name, rax, rcx, rdx, rbx, rsp, rbp, rsi, \
+                 rdi, r8, r9, r10, r11, r12, r13, r14, r15, rip); \
+   RegSimPrint32(regsim32name, eax, ecx, edx, ebx, esp, ebp, esi, \
+                 edi, r8d, r9d, r10d, r11d, r12d, r13d, r14d,     \
+                 r15d, eip);                                      \
+   RegSimPrint16(regsim16name, ax, cx, dx, bx, sp, bp, si, di,    \
+                 r8w, r9w, r10w, r11w, r12w, r13w, r14w, r15w,    \
+                 ip);                                             \
+   RegSimPrint8(regsim8lname, al, cl, dl, bl, spl, bpl, sil, dil, \
+                r8b, r9b, r10b, r11b, r12b, r13b, r14b, r15b, 0); \
+   RegSimPrint8(regsim8hname, ah, ch, dh, bh,0, 0, 0, 0, 0, 0,    \
+                0, 0, 0, 0, 0, 0, 0);                             \
+   printf("**** REGSIM: %s Instrumentation ****\n\n", misc);      \
+}                          
 
-RegSimInst(Pre)
-RegSimInst(Pst)
+RegSimInst(Pre, "preinst")
+RegSimInst(Pst, "pstinst")
 #undef RegSimInst
 
 void InstructionCallBack(unsigned type)

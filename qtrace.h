@@ -91,46 +91,64 @@
 #define QTRACE_ADD_COND_INST_TYPE_FLAG(s,flg,c)     {if(c) QTRACE_ADD_INST_TYPE_FLAG(s, flg);}
 #define QTRACE_SUB_COND_INST_TYPE_FLAG(s,flg,c)     {if(c) QTRACE_SUB_INST_TYPE_FLAG(s, flg);}
 #define RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictx)   {ictx->iargs[ictx->ciarg++] = 0;}
+#define RESERVE_INSTRUMENT_CONTEXT_ARG(ictx)        RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictx); 
 #define RESERVE_INSTRUMENT_CONTEXT_ARG_OFFSET(ictx) RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictx); 
 #define RESERVE_INSTRUMENT_CONTEXT_ARG_BASIZE(ictx) RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictx);
+
+#define RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictx)   \
+do  {                                               \
+    RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictx);      \
+    RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictx);      \
+    RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictx);      \
+} while(0);
+
+#define RESERVE_INSTRUMENT_CONTEXT_OP_BINARY(ictx)  \
+do  {                                               \
+    RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictx);      \
+    RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictx);      \
+    RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictx);      \
+} while(0);
+
+#define ADVANCE_INSTRUMENT_CONTEXT_OP_UNARY(x)      { x += 3; }
+#define ADVANCE_INSTRUMENT_CONTEXT_OP_BINARY(x)     { x += 9; }
 
 /// ------------------------------------------- 
 /// general facility.
 /// ------------------------------------------- 
 #define QTRACE_MAX_ARGS                             (1024)
-#define QTRACE_IFUN                                 (1<<0)
-#define QTRACE_IPOINT_BEFORE                        (1<<1)
-#define QTRACE_IPOINT_AFTER                         (1<<2)
-#define QTRACE_PROCESS_UPID                         (1<<3)
+#define QTRACE_IFUN                                 (1UL << 0)
+#define QTRACE_IPOINT_BEFORE                        (1UL << 1)
+#define QTRACE_IPOINT_AFTER                         (1UL << 2)
+#define QTRACE_PROCESS_UPID                         (1UL << 3)
 #define QTRACE_BEGIN_ARG                            QTRACE_MAX_ARGS
-#define QTRACE_END_ARG                              (1<<4)
+#define QTRACE_END_ARG                              (1UL << 4)
 #define QTRACE_PREINST(ictx)                        (ictx->ipoint == QTRACE_IPOINT_BEFORE)
 #define QTRACE_PSTINST(ictx)                        (ictx->ipoint == QTRACE_IPOINT_AFTER)
 
 /// ------------------------------------------- 
 /// memory tracing.
 /// ------------------------------------------- 
-#define QTRACE_MEMTRACE_FETCH_VMA                   (1<<5)
-#define QTRACE_MEMTRACE_FETCH_PMA                   (1<<6) 
-#define QTRACE_MEMTRACE_FETCH_MSIZE                 (1<<7)     
-#define QTRACE_MEMTRACE_FETCH_VALUE                 (1<<8)     
+#define QTRACE_MEMTRACE_FETCH_VMA                   (1UL << 5)
+#define QTRACE_MEMTRACE_FETCH_PMA                   (1UL << 6) 
+#define QTRACE_MEMTRACE_FETCH_MSIZE                 (1UL << 7)     
+#define QTRACE_MEMTRACE_FETCH_VALUE                 (1UL << 8)     
 #define QTRACE_MEMTRACE_FETCH_VPMA                  (QTRACE_MEMTRACE_FETCH_VMA | QTRACE_MEMTRACE_FETCH_PMA)
-#define QTRACE_MEMTRACE_STORE_VMA                   (1<<9)
-#define QTRACE_MEMTRACE_STORE_PMA                   (1<<10) 
-#define QTRACE_MEMTRACE_STORE_MSIZE                 (1<<11)     
-#define QTRACE_MEMTRACE_STORE_VALUE                 (1<<12)     
+#define QTRACE_MEMTRACE_STORE_VMA                   (1UL << 9)
+#define QTRACE_MEMTRACE_STORE_PMA                   (1UL << 10) 
+#define QTRACE_MEMTRACE_STORE_MSIZE                 (1UL << 11)     
+#define QTRACE_MEMTRACE_STORE_VALUE                 (1UL << 12)     
 #define QTRACE_MEMTRACE_STORE_VPMA                  (QTRACE_MEMTRACE_STORE_VMA | QTRACE_MEMTRACE_STORE_PMA)
 /* 4 internal values */
-#define QTRACE_MEMTRACE_FETCH_PREOP_VALUE           (1<<13)
-#define QTRACE_MEMTRACE_FETCH_PSTOP_VALUE           (1<<14)
-#define QTRACE_MEMTRACE_STORE_PREOP_VALUE           (1<<15)
-#define QTRACE_MEMTRACE_STORE_PSTOP_VALUE           (1<<16)
+#define QTRACE_MEMTRACE_FETCH_PREOP_VALUE           (1UL << 13)
+#define QTRACE_MEMTRACE_FETCH_PSTOP_VALUE           (1UL << 14)
+#define QTRACE_MEMTRACE_STORE_PREOP_VALUE           (1UL << 15)
+#define QTRACE_MEMTRACE_STORE_PSTOP_VALUE           (1UL << 16)
 
 /* shift away from the last N bits. they are used by QEMU */
 #define QTRACE_MEMTRACE_BITS                        ((int)(ceil(log2(NB_MMU_MODES)))) 
 #define QTRACE_ADD_MEMTRACE(index,x)                (((index) | (x << QTRACE_MEMTRACE_BITS))) 
 #define QTRACE_EXT_MEMTRACE(index)                  ((index >> QTRACE_MEMTRACE_BITS)) 
-#define QTRACE_EXT_MEMINDEX(index)                  ((index & ((1<<QTRACE_MEMTRACE_BITS)-1))) 
+#define QTRACE_EXT_MEMINDEX(index)                  ((index & ((1UL << QTRACE_MEMTRACE_BITS)-1))) 
 
 #define QTRACE_RESET_MEMTRACE_FETCH_ADDRS(x)        (x &= (~QTRACE_MEMTRACE_FETCH_VPMA)) 
 #define QTRACE_RESET_MEMTRACE_FETCH_MSIZE(x)        (x &= (~QTRACE_MEMTRACE_FETCH_MSIZE))
@@ -178,20 +196,37 @@
 /// ------------------------------------------- 
 /// register tracing.
 /// ------------------------------------------- 
-#define QTRACE_REGTRACE_VALUE                       (1<<17)
+#define QTRACE_REGTRACE_VALUE                       (1UL << 17)
+#define QTRACE_REGTRACE_VALUE_FETCH                 (1UL << 18)
+#define QTRACE_REGTRACE_VALUE_STORE                 (1UL << 19)
+#define QTRACE_REGTRACE_REGFETCH(x)                 (x&QTRACE_REGTRACE_VALUE_FETCH)
+#define QTRACE_REGTRACE_REGSTORE(x)                 (x&QTRACE_REGTRACE_VALUE_STORE)
 
 /// ------------------------------------------- 
 /// branch tracing.
 /// ------------------------------------------- 
-#define QTRACE_BRANCHTRACE_TARGET                   (1<<18)   
-#define QTRACE_BRANCHTRACE_TAKEN                    (1<<19)   
-#define QTRACE_BRANCHTRACE_NOTTAKEN                 (1<<20)   
+#define QTRACE_BRANCHTRACE_TARGET                   (1UL << 20)   
+#define QTRACE_BRANCHTRACE_TAKEN                    (1UL << 21)   
+#define QTRACE_BRANCHTRACE_NOTTAKEN                 (1UL << 22)   
 
 /// ------------------------------------------- 
 /// program counter tracing.
 /// ------------------------------------------- 
-#define QTRACE_PCTRACE_VMA                          (1<<21)
-#define QTRACE_PCTRACE_PMA                          (1<<22)
+#define QTRACE_PCTRACE_VMA                          (1UL << 23)
+#define QTRACE_PCTRACE_PMA                          (1UL << 24)
+
+/// ------------------------------------------- 
+/// qtrace icontext operators.
+/// ------------------------------------------- 
+#define QTRACE_ICONTEXT_OPERATOR_BINARYSUM          (1UL << 25)
+#define QTRACE_ICONTEXT_OPERATOR_BINARYSUB          (1UL << 26)
+#define QTRACE_ICONTEXT_OPERATOR_BINARYMUL          (1UL << 27)
+#define QTRACE_ICONTEXT_OPERATOR_BINARYDIV          (1UL << 28)
+#define QTRACE_ICONTEXT_OPERATOR_UNARYFETCH         (1UL << 29)
+#define QTRACE_ICONTEXT_OPERATOR_UNARYSTORE         (1UL << 30)
+#define QTRACE_ICONTEXT_OPERATOR_UNARYXLATE         (1UL << 31)
+#define QTRACE_ICONTEXT_OPERATOR_BINARYSUM_NOARG    (1UL << 32)
+#define QTRACE_ICONTEXT_OPERATOR_NOARG(x)           (x&QTRACE_ICONTEXT_OPERATOR_BINARYSUM_NOARG)
 
 /// ------------------------------------------------ ///
 /// instrumentation prototypes. 
@@ -227,6 +262,7 @@ void qtrace_invoke_client_from_list(const char *mn, const char* fn, GenericRtnCo
 /// qtrace_instrument_parser - called by every instruction to parse the 
 /// instrumentation requirements and construct the instrumentation 
 /// context list.
+void qtrace_instrument_x86_parser(unsigned pos, ...);
 void qtrace_instrument_parser(unsigned pos, ...); 
 
 /// QEMU dissasmbles instructions a basicblock at a time. For every instruction 

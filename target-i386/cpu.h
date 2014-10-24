@@ -922,7 +922,7 @@ typedef struct CPUX86State {
     /* QTRACE - hidden register states */
     target_ulong linear_eip;
     target_ulong branch_eip;
-    hwaddr phys_eip;
+    hwaddr       physical_eip;
 
     /* QTRACE - register shadowing */
     struct CPUX86State *shadowcpu;

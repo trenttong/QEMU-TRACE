@@ -28,6 +28,7 @@
 /// miscellaneous 
 /// ------------------------------------------------ ///
 #define QTRACE_EXIT             exit
+#define QTRACE_WARN             printf
 #define QTRACE_ERROR            printf
 #define QTRACE_CHANNEL_LOCK     pthread_mutex_lock
 #define QTRACE_CHANNEL_UNLOCK   pthread_mutex_unlock
@@ -72,12 +73,12 @@ typedef struct rc {
 /// instruction executes.
 typedef struct InstrumentContext  {
     uintptr_t ifun;     /* instrumentation function */
-    unsigned  ipoint;   /* insertion point */ 
-    unsigned  ciarg;    /* current iarg */
-    unsigned  iargs[QTRACE_MAX_IARGS]; /* instrumentation args */
-    unsigned  memfext;  /* this context has memory instrumentation */
-    unsigned  pcfext;   /* this context has program counter instrumentation */
-    unsigned  btarget;  /* this context has branch instrumentation */
+    uint64_t  ipoint;   /* insertion point */ 
+    uint64_t  ciarg;    /* current iarg */
+    uint64_t  iargs[QTRACE_MAX_IARGS]; /* instrumentation args */
+    uint64_t  memfext;  /* this context has memory instrumentation */
+    uint64_t  pcfext;   /* this context has program counter instrumentation */
+    uint64_t  btarget;  /* this context has branch instrumentation */
 	struct InstrumentContext *next;
 } InstrumentContext;
 

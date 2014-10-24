@@ -1471,8 +1471,11 @@ static void initialize_adebug(void)
                           S_IWUSR);       // Owner write permission.
 
    channel = (DebugChannel*)shmat(shared_id, NULL, 0);
-   assert(channel);
-   // printf("create channel 0x%lx with key %d\n", (long unsigned int)channel, SHARED_MEM_KEY);
+   if (channel == (DebugChannel*)-1) {
+       QTRACE_ERROR("unable to create qemu-adebug channel\n");
+       QTRACE_EXIT(-1);
+   }
+   /* done */
 }
 
 static void adebug_free(void ) {  shmdt(channel);  }

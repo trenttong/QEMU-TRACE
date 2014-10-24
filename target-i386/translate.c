@@ -343,32 +343,19 @@ static inline void gen_op_sync_lpc(target_ulong val)
 static inline void gen_op_sync_ppc(target_ulong val)
 {
     tcg_gen_movi_tl(cpu_tmp0, val);
-    tcg_gen_st_tl(cpu_tmp0, cpu_env, offsetof(CPUX86State, phys_eip));
+    tcg_gen_st_tl(cpu_tmp0, cpu_env, offsetof(CPUX86State, physical_eip));
 }
 
 static inline void gen_op_sync_preinst_pc(DisasContext *s)
 {
-    gen_op_sync_pc(s->pc_start - s->cs_base);
+    gen_op_sync_pc(s->pc - s->cs_base);
+    gen_op_sync_lpc(s->pc);
+    gen_op_sync_ppc(s->phys_pc_start);
 }
 
 static inline void gen_op_sync_pstinst_pc(DisasContext *s)
 {
     gen_op_sync_pc(s->pc - s->cs_base);
-}
-
-static inline void gen_op_sync_preinst_lpc(DisasContext *s)
-{
-    gen_op_sync_lpc(s->pc_start);
-}
-
-static inline void gen_op_sync_pstinst_lpc(DisasContext *s)
-{
-    gen_op_sync_lpc(s->pc);
-}
-
-static inline void gen_op_sync_preinst_ppc(DisasContext *s)
-{
-    gen_op_sync_ppc(s->phys_pc_start);
 }
 
 static inline void gen_op_sync_bpc(DisasContext *s)
@@ -378,9 +365,9 @@ static inline void gen_op_sync_bpc(DisasContext *s)
 }
 
 static unsigned qtrace_get_reg_size_and_offset(DisasContext *s, 
-                                                    unsigned  regnum, 
-                                                    unsigned *rmsize, 
-                                                    unsigned *offset)
+                                               unsigned  regnum, 
+                                               uint64_t *offset,
+                                               uint64_t *rmsize) 
 {
     switch(regnum)
     {
@@ -424,6 +411,10 @@ static unsigned qtrace_get_reg_size_and_offset(DisasContext *s,
 pceip_offset:
          *offset = offsetof(CPUX86State, eip);
          break;
+    case QTRACE_X86_CS:
+         *rmsize = sizeof(target_ulong)*8;
+         *offset = offsetof(CPUX86State, segs[R_CS].base);
+         break;
     /* post branch program counter register */
     case R_BRIP:
          *rmsize = sizeof(target_ulong)*8;
@@ -437,7 +428,7 @@ pceip_offset:
     /* physical program counter register */
     case R_PRIP :
          *rmsize = sizeof(target_ulong)*8;
-         *offset = offsetof(CPUX86State, phys_eip);
+         *offset = offsetof(CPUX86State, physical_eip);
          break;
     /* control register */
     case R_CR0 :
@@ -473,7 +464,9 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
     while (icontext)
     {
         unsigned idx = 0, ciarg = icontext->ciarg;
-        unsigned regidx = 0, offset = 0, rmsize = 0;
+        uint64_t regidx = 0;
+        uint64_t offset = 0;
+        uint64_t basize = 0;
         while(idx<ciarg)
         {
             switch(icontext->iargs[idx])
@@ -481,42 +474,66 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
             /// ---------------------------------- ///
             /// register trace
             /// ---------------------------------- ///
-            case QTRACE_REGTRACE_VALUE:
+            case QTRACE_REGTRACE_VALUE_FETCH:
+            case QTRACE_REGTRACE_VALUE_STORE:
+                 icontext->iargs[idx] = QTRACE_REGTRACE_REGFETCH(icontext->iargs[idx]) ?
+                                        QTRACE_ICONTEXT_OPERATOR_UNARYFETCH : 
+                                        QTRACE_ICONTEXT_OPERATOR_UNARYSTORE ;
                  regidx = icontext->iargs[idx+1];
                  qtrace_get_reg_size_and_offset(s, regidx, 
-                                                &icontext->iargs[idx], 
-                                                &icontext->iargs[idx+1]);
+                                                &icontext->iargs[idx+1], 
+                                                &icontext->iargs[idx+2]);
                  /* create a register shadow if preinst instrumentation */
                  if (QTRACE_PREINST(icontext))
                  {
                     tcg_gen_op2i(INDEX_op_qtrace_shadow_register, 
-                                 &icontext->iargs[idx], 
-                                 &icontext->iargs[idx+1]);
+                                 icontext->iargs[idx+1], 
+                                 icontext->iargs[idx+2]);
                  }
-                 /* no need to create any IR for post-inst instrumentation.
-                    as they can simply load from the modified architectural
-                    states */
-                 /* advance 2 indices */
-                 idx = idx + 2;
+                 /* no need to create any shadow IR for pst-inst instrument. */
+                 ADVANCE_INSTRUMENT_CONTEXT_OP_UNARY(idx);
                  break;
             /// ---------------------------------- ///
-            /// miscellaneous instrumentation converted into register trace.
+            /// pc trace. converted into 2 register traces.
             /// ---------------------------------- ///
             case QTRACE_PCTRACE_VMA:
                  /* register trace with R_RIP */
-                 icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE;
-                 icontext->iargs[idx+1] = R_LRIP;   /* register to trace */
-                 icontext->iargs[idx+2] = 0;        /* size of register to trace */
-                 /* backup one argument and re-evaluate */
-                 --idx;
+                 icontext->iargs[idx+0] = QTRACE_ICONTEXT_OPERATOR_BINARYSUM;
+                 icontext->iargs[idx+1] = QTRACE_REGTRACE_VALUE_STORE;
+                 icontext->iargs[idx+2] = R_LRIP;           /* trace linear rip */
+                 icontext->iargs[idx+3] = 0;   
+                 icontext->iargs[idx+4] = QTRACE_REGTRACE_VALUE_FETCH;
+                 icontext->iargs[idx+5] = QTRACE_X86_RIP;   /* trace rip */
+                 icontext->iargs[idx+6] = 0;        
+                 icontext->iargs[idx+7] = QTRACE_REGTRACE_VALUE_FETCH;
+                 icontext->iargs[idx+8] = QTRACE_X86_CS;   /* trace cs reg */
+                 icontext->iargs[idx+9] = 0;        
+                 ++idx;
                  break;
             case QTRACE_PCTRACE_PMA:
-                 /* register trace with R_RIP */
-                 icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE;
-                 icontext->iargs[idx+1] = R_PRIP;   /* register to trace */
-                 icontext->iargs[idx+2] = 0;        /* size of register to trace */
-                 /* backup one argument and re-evaluate */
-                 --idx;
+                 /* register trace with R_RIP. no instrumentation arg */
+                 icontext->iargs[idx+0] = QTRACE_ICONTEXT_OPERATOR_BINARYSUM_NOARG;
+                 icontext->iargs[idx+1] = QTRACE_REGTRACE_VALUE_STORE;
+                 icontext->iargs[idx+2] = R_LRIP;           /* trace linear rip */
+                 icontext->iargs[idx+3] = 0;   
+                 icontext->iargs[idx+4] = QTRACE_REGTRACE_VALUE_FETCH;
+                 icontext->iargs[idx+5] = QTRACE_X86_RIP;   /* trace rip */
+                 icontext->iargs[idx+6] = 0;        
+                 icontext->iargs[idx+7] = QTRACE_REGTRACE_VALUE_FETCH;
+                 icontext->iargs[idx+8] = QTRACE_X86_CS;   /* trace cs reg */
+                 icontext->iargs[idx+9] = 0;        
+                 /* use xlate node to translate R_LRIP to physical ip */
+                 icontext->iargs[idx+10] = QTRACE_ICONTEXT_OPERATOR_UNARYXLATE;
+                 icontext->iargs[idx+11] = R_LRIP;           
+                 icontext->iargs[idx+12] = 0;   
+                 ++idx;
+                 break;
+            case QTRACE_ICONTEXT_OPERATOR_UNARYXLATE:
+                 qtrace_get_reg_size_and_offset(s, icontext->iargs[idx+1], &offset, &basize); 
+                 icontext->iargs[idx+0] = QTRACE_ICONTEXT_OPERATOR_UNARYXLATE;
+                 icontext->iargs[idx+1] = offset;           
+                 icontext->iargs[idx+2] = basize;   
+                 ADVANCE_INSTRUMENT_CONTEXT_OP_UNARY(idx);
                  break;
             /// ---------------------------------- ///
             /// process ID trace.
@@ -597,6 +614,7 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
                  }
                  break;
             default:
+                 ++idx;
                  break;
             } 
         }
@@ -5075,6 +5093,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     s->rip_offset = 0; /* for relative ip address */
     s->vex_l = 0;
     s->vex_v = 0;
+
  next_byte:
     b = cpu_ldub_code(env, s->pc);
     s->phys_pc_start = tlb_fetch_xlate_after_refill_no_fail(env, s->pc, cpu_mmu_index(env));
@@ -5299,6 +5318,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     case 0x83:
         {
             QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_ARITHLOGIC);
+            QTRACE_CLIENT_MODULE(s);
             int val;
 
             if ((b & 1) == 0)
@@ -5931,21 +5951,21 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     case 0x50 ... 0x57: /* push */
         /* QTRACE - this is a load from memory */
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_STORE);
-        //QTRACE_CLIENT_MODULE(s);
+        QTRACE_CLIENT_MODULE(s);
 
         gen_op_mov_TN_reg(OT_LONG, 0, (b & 7) | REX_B(s));
         gen_push_T0(s);
         break;
     case 0x58 ... 0x5f: /* pop */
+        /* QTRACE - this is a store to memory */
+        QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_FETCH);
+        QTRACE_CLIENT_MODULE(s);
+
         if (CODE64(s)) {
             ot = dflag ? OT_QUAD : OT_WORD;
         } else {
             ot = dflag + OT_WORD;
         }
-        /* QTRACE - this is a store to memory */
-        QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_FETCH);
-        //QTRACE_CLIENT_MODULE(s);
-
         gen_pop_T0(s);
         /* NOTE: order is important for pop %sp */
         gen_pop_update(s);
@@ -8802,13 +8822,8 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     if (s->prefix & PREFIX_LOCK)
         gen_helper_unlock();
 
-    /* QTRACE - update the post instruction pc if its not a jump. 
-       control flow instructions must have updated program counter */
-    if (!s->is_jmp)  {
-      gen_op_sync_pstinst_pc(s);
-      gen_op_sync_preinst_lpc(s);
-      gen_op_sync_preinst_ppc(s);
-    }
+    /* QTRACE - update pc, linear pc and physical pc */
+    gen_op_sync_pstinst_pc(s);
 
     return s->pc;
  illegal_op:
@@ -9014,6 +9029,7 @@ static inline void gen_intermediate_code_internal(X86CPU *cpu,
         /* QTRACE. is this a user or kernel level instruction */
         is_kern = (dc->cpl == 0);
         is_user = (dc->cpl >  0);
+        if (dc->cpl != 0 && dc->cpl != 3) QTRACE_WARN("unknown priviledge level\n");
         if (is_kern) QTRACE_ADD_INST_TYPE_FLAG(dc, QTRACE_IS_KERN);
         if (is_user) QTRACE_ADD_INST_TYPE_FLAG(dc, QTRACE_IS_USER);
 

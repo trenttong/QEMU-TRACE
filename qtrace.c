@@ -22,6 +22,16 @@
 #include <stdarg.h>
 #include "cpu.h"
 #include "qtrace.h"
+#include "config.h"
+
+/// ------------------------------------------------ ///
+/// frontend compiling for. 
+/// ------------------------------------------------ ///
+#if TARGET_X86_64 == 1
+    #define qtrace_instrument_parser qtrace_instrument_x86_parser 
+#else
+    #error "unsupport platform"
+#endif
 
 /* maximum # of instructions per basicblock */
 #define MAX_ICONTEXT_ROOT CF_COUNT_MASK 
@@ -201,7 +211,7 @@ void qtrace_icontext_sanity_check(InstrumentContext *ictx)
 /// @ qtrace_instrument - this function is called by the instrumentatiom module.
 /// @ it parses what is requested by the instrumentation module into a icontext
 /// @ structure.
-void qtrace_instrument_parser(unsigned pos, ...) 
+void qtrace_instrument_x86_parser(unsigned pos, ...) 
 {
    va_list arguments;                  
    va_start(arguments, pos);         
@@ -239,7 +249,7 @@ void qtrace_instrument_parser(unsigned pos, ...)
    unsigned idx=0;
    for (idx=0;idx<pos;++idx) 
    {
-      unsigned arg = va_arg(arguments, unsigned);
+      uint64_t arg = va_arg(arguments, unsigned);
       switch (arg)
       {
       case QTRACE_IPOINT_BEFORE:
@@ -257,17 +267,39 @@ void qtrace_instrument_parser(unsigned pos, ...)
       //// register trace. */
       /// ---------------------------------- ///
       case QTRACE_REGTRACE_VALUE:
-           ictxhead->iargs[ictxhead->ciarg++] = arg;
+           /* record the instrumentation type */
+           ictxhead->iargs[ictxhead->ciarg++] = QTRACE_REGTRACE_VALUE_FETCH;
            /* this will be modified into offset by frontends */
            ictxhead->iargs[ictxhead->ciarg++] = va_arg(arguments, unsigned);
            /* reserve for instrumentation size */
            RESERVE_INSTRUMENT_CONTEXT_ARG_BASIZE(ictxhead);
            break;
+      case QTRACE_PCTRACE_VMA:
+           /* record the instrumentation type */
+           ictxhead->iargs[ictxhead->ciarg++] = arg;
+           /* computed eip + cs_base */
+           RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictxhead);
+           /* eip */
+           RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictxhead);
+           /* cs_base */
+           RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictxhead);
+           break;
+      case QTRACE_PCTRACE_PMA:
+           /* record the instrumentation type */
+           ictxhead->iargs[ictxhead->ciarg++] = arg;
+           /* computed eip + cs_base */
+           RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictxhead);
+           /* eip */
+           RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictxhead);
+           /* cs_base */
+           RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictxhead);
+           /* xlate node */
+           RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictxhead);
+           break;
       /// ---------------------------------- ///
       //// miscellaneous register trace. */
       /// ---------------------------------- ///
       case QTRACE_PROCESS_UPID:
-      case QTRACE_PCTRACE_VMA:
       case QTRACE_BRANCHTRACE_TARGET:
            /* shall be converted to regtrace in the frontend */
            ictxhead->iargs[ictxhead->ciarg++] = arg;

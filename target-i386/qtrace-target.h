@@ -101,10 +101,12 @@
 #define QTRACE_X86_DH   69
 #define QTRACE_X86_BH   70
 
+#define QTRACE_X86_CS   71
+
 /* arcitecturally invisible register */
-#define R_LRIP          71 
-#define R_PRIP          72 
-#define R_BRIP          73
+#define R_LRIP          72 
+#define R_PRIP          73 
+#define R_BRIP          74
 
 /* control register. */
 #define R_CR0 109 
