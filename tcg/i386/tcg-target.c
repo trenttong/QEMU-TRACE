@@ -1929,6 +1929,8 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, bool is64)
 #endif
 }
 
+
+/* QTRACE - handle unary translation */
 static inline void tcg_out_qtrace_instrument_handle_unarymem(TCGContext *s,
                                                              InstrumentContext *icontext,
                                                              uint32_t  index,
@@ -1936,8 +1938,6 @@ static inline void tcg_out_qtrace_instrument_handle_unarymem(TCGContext *s,
                                                              uint32_t* offset, 
                                                              uint64_t* mask) 
 {
-    bool is_fetch = (icontext->iargs[index] == QTRACE_ICONTEXT_OPERATOR_UNARYFETCH);
-    *opcode = is_fetch ? OPC_MOVL_GvEv + P_REXW : OPC_MOVL_EvGv + P_REXW;
     /* figure out the opcode based on the size */
     uint32_t memop = log2(icontext->iargs[index+2])-3;
     switch(memop)
@@ -1958,7 +1958,50 @@ static inline void tcg_out_qtrace_instrument_handle_unarymem(TCGContext *s,
          QTRACE_ERROR("unknown register size\n");
          break;
     }
+    *opcode = (icontext->iargs[index] == QTRACE_ICONTEXT_OPERATOR_UNARYFETCH) ? 
+               OPC_MOVL_GvEv + P_REXW : OPC_MOVL_EvGv + P_REXW;
     *offset = icontext->iargs[index+1];
+    /* done */
+}
+
+/* QTRACE - handle unary load and store */
+static inline void tcg_out_qtrace_instrument_handle_unaryxlate(TCGContext *s,
+                                                               InstrumentContext *icontext,
+                                                               uint32_t  index,
+                                                               uint32_t* opcode, 
+                                                               uint32_t* offset, 
+                                                               uint64_t* mask) 
+{
+    /* figure out the opcode based on the size */
+    uint32_t memop = log2(icontext->iargs[index+2])-3;
+    switch(memop)
+    {
+    case MO_64:
+         *mask = (uint64_t)(-1);
+         break;
+    case MO_32:
+         *mask = (uint32_t)(-1);
+         break;
+    case MO_16:
+         *mask = (uint16_t)(-1);
+         break;
+    case MO_8:
+         *mask = (uint8_t)(-1);
+         break;
+    default:
+         QTRACE_ERROR("unknown register size\n");
+         break;
+    }
+    *opcode = OPC_MOVL_GvEv + P_REXW;
+    *offset = icontext->iargs[index+1];
+
+    /* now generate the callout to have the address held in offset and mask xlated */
+    tcg_out_mov(s,  TCG_TYPE_PTR, tcg_target_call_iarg_regs[0], TCG_AREG0);
+    tcg_out_movi(s, TCG_TYPE_I32, tcg_target_call_iarg_regs[1], *offset);
+    tcg_out_movi(s, TCG_TYPE_I64, tcg_target_call_iarg_regs[2], *mask);
+
+    /* this will put the translated address in the offset */
+    tcg_out_calli(s, (uintptr_t)tlb_fetch_xlate_no_fail);
     /* done */
 }
 
@@ -1974,25 +2017,12 @@ static inline void tcg_out_qtrace_instrument_handle_binarysum(TCGContext *s,
                                                               uint64_t op2offs, 
                                                               uint32_t op2mask)
 {
-    /* load from the shadow area */
-    if (QTRACE_PREINST(icontext))
-    {
-        tcg_out_qemu_ld_direct(s, TCG_REG_RAX, TCG_REG_RAX, TCG_AREG0, 
-                               offsetof(CPUArchState, shadowcpu_offset), 
-                               0, MO_Q);
-        tgen_arithr(s, ARITH_ADD + P_REXW, TCG_REG_RAX, TCG_AREG0);
-    }
-    else
-    {
-        tcg_out_mov(s, TCG_TYPE_I64, TCG_REG_RAX, TCG_AREG0);
-    }
-
     /* compute tree node 1 */
-    tcg_out_modrm_offset(s, op1opcode, TCG_REG_R10, TCG_REG_RAX, op1offs);		
+    tcg_out_modrm_offset(s, op1opcode, TCG_REG_R10, TCG_AREGS, op1offs);		
     tgen_arithi(s, ARITH_AND + P_REXW, TCG_REG_R10, op1mask, 0);
 
     /* compute tree node 2 */
-    tcg_out_modrm_offset(s, op2opcode, TCG_REG_R11, TCG_REG_RAX, op2offs);		
+    tcg_out_modrm_offset(s, op2opcode, TCG_REG_R11, TCG_AREGS, op2offs);		
     tgen_arithi(s, ARITH_AND + P_REXW, TCG_REG_R11, op2mask, 0);
 
     /* compute sum */
@@ -2000,7 +2030,7 @@ static inline void tcg_out_qtrace_instrument_handle_binarysum(TCGContext *s,
     tgen_arithi(s, ARITH_AND + P_REXW, TCG_REG_R10, dstmask, 0);
 
     /* store the computed value to dst */
-    tcg_out_modrm_offset(s, dstopcode, TCG_REG_R10, TCG_REG_RAX, dstoffs);		
+    tcg_out_modrm_offset(s, dstopcode, TCG_REG_R10, TCG_AREGS, dstoffs);		
 }
 
 
@@ -2011,21 +2041,9 @@ static inline void tcg_out_qtrace_instrument_reg_setup(TCGContext *s,
                                                        uint64_t param_offset, 
                                                        uint32_t param_bamask)
 {
-    /* load from the shadow area */
-    if (QTRACE_PREINST(icontext))
-    {
-        tcg_out_qemu_ld_direct(s, TCG_REG_RAX, TCG_REG_RAX, TCG_AREG0, 
-                               offsetof(CPUArchState, shadowcpu_offset), 
-                               0, MO_Q);
-        tgen_arithr(s, ARITH_ADD + P_REXW, TCG_REG_RAX, TCG_AREG0);
-    }
-    else 
-    {
-        tcg_out_mov(s, TCG_TYPE_I64, TCG_REG_RAX, TCG_AREG0);
-    }
-
+    /* load value */
     tcg_out_modrm_offset(s, OPC_MOVL_GvEv + P_REXW, tcg_target_call_iarg_regs[regnum], 
-                         TCG_REG_RAX, param_offset);		
+                         TCG_AREGS, param_offset);		
     /* mask off the uncessary portion */
     tgen_arithi(s, ARITH_AND + P_REXW, tcg_target_call_iarg_regs[regnum], param_bamask, 0);
 }
@@ -2036,25 +2054,15 @@ static inline void tcg_out_qtrace_instrument_stk_setup(TCGContext *s,
                                                        uint64_t param_bamask, 
                                                        uint32_t soffset)
 {
-    /* load from the shadow area */
-    if (QTRACE_PREINST(icontext))
-    {
-        tcg_out_qemu_ld_direct(s, TCG_REG_RAX, TCG_REG_RAX, TCG_AREG0, 
-                               offsetof(CPUArchState, shadowcpu_offset), 
-                               0, MO_Q);
-        tgen_arithr(s, ARITH_ADD + P_REXW, TCG_REG_RAX, TCG_AREG0);
-    }
-    else
-    {
-        tcg_out_mov(s, TCG_TYPE_I64, TCG_REG_RAX, TCG_AREG0);
-    }
-
-    tcg_out_modrm_offset(s, OPC_MOVL_GvEv + P_REXW, TCG_REG_RAX, TCG_REG_RAX, param_offset);		
+    /* load value */
+    tcg_out_modrm_offset(s, OPC_MOVL_GvEv + P_REXW, 
+                         TCG_REG_R10, 
+                         TCG_AREGS, param_offset);		
     /* mask off the uncessary portion */
-    tgen_arithi(s, ARITH_AND + P_REXW, TCG_REG_RAX, param_bamask, 0);
+    tgen_arithi(s, ARITH_AND + P_REXW, TCG_REG_R10, param_bamask, 0);
 
     /* push onto stack */ 
-    tcg_out_modrm_offset(s, OPC_MOVL_EvGv + P_REXW, TCG_REG_RAX, TCG_REG_RSP, soffset);		
+    tcg_out_modrm_offset(s, OPC_MOVL_EvGv + P_REXW, TCG_REG_R10, TCG_REG_RSP, soffset);		
 }
 
 static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *icontext)
@@ -2066,9 +2074,9 @@ static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *ic
     /* unary and binary operators */
     uint32_t param_offset = 0;
     uint64_t param_bamask = 0;
-    uint32_t dst_opcode, op1_opcode, op2_opcode;
-    uint32_t dst_offset, op1_offset, op2_offset;
-    uint64_t dst_bamask, op1_bamask, op2_bamask;
+    uint32_t dst_opcode = 0, op1_opcode = 0, op2_opcode = 0;
+    uint32_t dst_offset = 0, op1_offset = 0, op2_offset = 0;
+    uint64_t dst_bamask = 0, op1_bamask = 0, op2_bamask = 0;
 
     /* stack based parameters */
     uint32_t stack_totalsize   = 0;
@@ -2082,6 +2090,21 @@ static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *ic
     memset(stack_param_offset, 0, sizeof(unsigned)*QTRACE_MAX_IARGS);
     memset(stack_param_basize, 0, sizeof(unsigned)*QTRACE_MAX_IARGS);
 
+    /* if this is a preinstruction instrumentation, load from the shadow area */
+    if (QTRACE_ISPREINST_INSTRUMENT(icontext))
+    {
+        tcg_out_qemu_ld_direct(s, 
+                               TCG_AREGS, 
+                               TCG_AREGS, TCG_AREG0, 
+                               offsetof(CPUArchState, shadowcpu_offset), 
+                               0, MO_Q);
+        tgen_arithr(s, ARITH_ADD + P_REXW, TCG_AREGS, TCG_AREG0);
+    }
+    else
+    {
+        tcg_out_mov(s, TCG_TYPE_PTR, TCG_AREGS, TCG_AREG0);
+    }
+
     int32_t idx = 0;
     /* first 6 integer arguments go into registers. */
     /* if more than 6 integral parameters, then pass rest on stack */
@@ -2091,15 +2114,14 @@ static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *ic
         switch(icontext->iargs[idx])
         {
         /// ---------------------------------- ///
-        /// xlate. 
+        /// unary xlate. 
         /// ---------------------------------- ///
         case QTRACE_ICONTEXT_OPERATOR_UNARYXLATE:
-             icontext->iargs[idx] = QTRACE_ICONTEXT_OPERATOR_UNARYFETCH;
-             tcg_out_qtrace_instrument_handle_unarymem(s, icontext, 
-                                                       idx, 
-                                                       &dst_opcode, 
-                                                       &dst_offset, 
-                                                       &dst_bamask);
+             tcg_out_qtrace_instrument_handle_unaryxlate(s, icontext, 
+                                                         idx, 
+                                                         &dst_opcode, 
+                                                         &dst_offset, 
+                                                         &dst_bamask);
              param_offset = dst_offset;
              param_bamask = dst_bamask;
              ADVANCE_INSTRUMENT_CONTEXT_OP_UNARY(idx);
@@ -2167,6 +2189,7 @@ static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *ic
              ADVANCE_INSTRUMENT_CONTEXT_OP_UNARY(idx);
              break;
         default:
+             QTRACE_ERROR("QTRACE - unhandled opcode\n");
              break;
         }
 
@@ -2808,7 +2831,7 @@ static int tcg_target_callee_save_regs[] = {
     TCG_REG_R12,
     TCG_REG_R13,
     TCG_REG_R14, /* Currently used for the global env. */
-    TCG_REG_R15,
+    TCG_REG_R15, /* Currently used for the global shadow env */
 #else
     TCG_REG_EBP, /* Currently used for the global env. */
     TCG_REG_EBX,

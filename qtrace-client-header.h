@@ -21,8 +21,12 @@
 #define QTRACE_CLIENT_HEADER_H
 
 #include "qtrace.h"
+#include "qtrace-api.h"
 #include "qtrace-common.h"
 #include "qtrace-target.h"
+
+/* mark user defined main function as constructor so that it executes on load */
+static int main(void) __attribute__((constructor));
 
 /* functions to ask QTRACE to insert instrumentation */
 static QTRACE_INSERT_INSTRUMENT QTRACE_INSTRUCTION_INSTRUMENT;

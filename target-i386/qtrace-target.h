@@ -16,8 +16,8 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef QTRACE_I386_H
-#define QTRACE_I386_H
+#ifndef QTRACE_TARGET_H
+#define QTRACE_TARGET_H
 
 /// ------------------------------
 /// register 
@@ -130,4 +130,4 @@
 /// ------------------------------
 #define NB_MMU_MODES 3
 
-#endif /// QTRACE_I386_H
+#endif /// QTRACE_TARGET_H

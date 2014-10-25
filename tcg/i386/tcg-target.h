@@ -139,6 +139,7 @@ typedef enum {
 
 #if TCG_TARGET_REG_BITS == 64
 # define TCG_AREG0 TCG_REG_R14
+# define TCG_AREGS TCG_REG_R15
 #else
 # define TCG_AREG0 TCG_REG_EBP
 #endif

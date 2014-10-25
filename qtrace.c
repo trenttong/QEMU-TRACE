@@ -28,9 +28,9 @@
 /// frontend compiling for. 
 /// ------------------------------------------------ ///
 #if TARGET_X86_64 == 1
-    #define qtrace_instrument_parser qtrace_instrument_x86_parser 
+# define qtrace_instrument_parser qtrace_instrument_x86_parser 
 #else
-    #error "unsupport platform"
+# error "unsupport platform"
 #endif
 
 /* maximum # of instructions per basicblock */

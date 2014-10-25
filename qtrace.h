@@ -25,64 +25,6 @@
 #include <stdbool.h>
 
 /// ------------------------------------------------ ///
-/// instruction types. 
-/// ------------------------------------------------ ///
-#define QTRACE_IS_USER            (1<<0)
-#define QTRACE_IS_KERN            (1<<1)
-#define QTRACE_IS_FETCH           (1<<2)
-#define QTRACE_IS_STORE           (1<<3)
-#define QTRACE_IS_JMP             (1<<4)
-#define QTRACE_IS_CALL            (1<<5)
-#define QTRACE_IS_RETURN          (1<<6)
-#define QTRACE_IS_SYSENTER        (1<<7)
-#define QTRACE_IS_SYSEXIT         (1<<8)
-#define QTRACE_IS_SYSCALL         (1<<9)
-#define QTRACE_IS_SYSRET          (1<<10)
-#define QTRACE_IS_CPUID           (1<<11)
-#define QTRACE_IS_HLT             (1<<12)
-#define QTRACE_IS_INVLPGA         (1<<13)
-#define QTRACE_IS_MONITOR         (1<<14)
-#define QTRACE_IS_MWAIT           (1<<15)
-#define QTRACE_IS_INVD            (1<<16)
-#define QTRACE_IS_PREFETCH        (1<<17)
-#define QTRACE_IS_NOP             (1<<18)
-#define QTRACE_IS_MEMFENCE        (1<<19)
-#define QTRACE_IS_CLFLUSH         (1<<20)
-#define QTRACE_IS_RDTSC           (1<<21)
-#define QTRACE_IS_SSE             (1<<22)
-#define QTRACE_IS_FLOAT           (1<<23)
-#define QTRACE_IS_COND            (1<<24)
-#define QTRACE_IS_ARITHLOGIC      (1<<25)
-#define QTRACE_IS_INDIRECT        (1<<26)
-
-#define QTRACE_TEST_USER(X)       ((X&QTRACE_IS_USER))
-#define QTRACE_TEST_KERN(X)       ((X&QTRACE_IS_KERN))
-#define QTRACE_TEST_FETCH(X)      ((X&QTRACE_IS_FETCH))
-#define QTRACE_TEST_STORE(X)      ((X&QTRACE_IS_STORE))
-#define QTRACE_TEST_JMP(X)        ((X&QTRACE_IS_JMP))
-#define QTRACE_TEST_CALL(X)       ((X&QTRACE_IS_CALL))
-#define QTRACE_TEST_RETURN(X)     ((X&QTRACE_IS_RETURN)) 
-#define QTRACE_TEST_SYSENTER(X)   ((X&QTRACE_IS_SYSENTER))
-#define QTRACE_TEST_SYSEXIT(X)    ((X&QTRACE_IS_SYSEXIT))
-#define QTRACE_TEST_SYSCALL(X)    ((X&QTRACE_IS_SYSCALL))
-#define QTRACE_TEST_SYSRET(X)     ((X&QTRACE_IS_SYSRET))
-#define QTRACE_TEST_CPUID(X)      ((X&QTRACE_IS_CPUID))
-#define QTRACE_TEST_HLT(X)        ((X&QTRACE_IS_HLT))
-#define QTRACE_TEST_INVLPGA(X)    ((X&QTRACE_IS_INVLPGA))
-#define QTRACE_TEST_MONITOR(X)    ((X&QTRACE_IS_MONITOR))
-#define QTRACE_TEST_MWAIT(X)      ((X&QTRACE_IS_MWAIT))
-#define QTRACE_TEST_INVD(X)       ((X&QTRACE_IS_INVD))
-#define QTRACE_TEST_PREFETCH(X)   ((X&QTRACE_IS_PREFETCH))
-#define QTRACE_TEST_NOP(X)        ((X&QTRACE_IS_NOP))
-#define QTRACE_TEST_MEMFENCE(X)   ((X&QTRACE_IS_MEMFENCE))
-#define QTRACE_TEST_CLFLUSH(X)    ((X&QTRACE_IS_CLFLUSH))
-#define QTRACE_TEST_RDTSC(X)      ((X&QTRACE_IS_RDTSC)) 
-#define QTRACE_TEST_SSE(X)        ((X&QTRACE_IS_SSE))
-#define QTRACE_TEST_COND(X)       ((X&QTRACE_IS_COND))
-#define QTRACE_TEST_ARITHLOGIC(X) ((X&QTRACE_IS_ARITHLOGIC)) 
-#define QTRACE_TEST_INDIRECT(X)   ((X&QTRACE_IS_INDIRECT)) 
-
-/// ------------------------------------------------ ///
 /// instrumentation IDs and flags. 
 /// ------------------------------------------------ ///
 #define QTRACE_RESET_INST_TYPE_FLAG(s)              (s->qtrace_insnflags=0)
@@ -122,7 +64,7 @@ do  {                                               \
 #define QTRACE_PROCESS_UPID                         (1UL << 3)
 #define QTRACE_BEGIN_ARG                            QTRACE_MAX_ARGS
 #define QTRACE_END_ARG                              (1UL << 4)
-#define QTRACE_PREINST(ictx)                        (ictx->ipoint == QTRACE_IPOINT_BEFORE)
+#define QTRACE_ISPREINST_INSTRUMENT(ictx)                        (ictx->ipoint == QTRACE_IPOINT_BEFORE)
 #define QTRACE_PSTINST(ictx)                        (ictx->ipoint == QTRACE_IPOINT_AFTER)
 
 /// ------------------------------------------- 

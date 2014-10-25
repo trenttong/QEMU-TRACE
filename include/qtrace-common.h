@@ -28,8 +28,6 @@
 /// miscellaneous 
 /// ------------------------------------------------ ///
 #define QTRACE_EXIT             exit
-#define QTRACE_WARN             printf
-#define QTRACE_ERROR            printf
 #define QTRACE_CHANNEL_LOCK     pthread_mutex_lock
 #define QTRACE_CHANNEL_UNLOCK   pthread_mutex_unlock
 #define QTRACE_WAIT_COMMAND_HANDLED(X)  while(!X);
@@ -40,6 +38,16 @@
 #define ResetStatsNameString  "ResetStats"
 #define PrintStatsNameString  "PrintStats"
 #define SHARED_MEM_KEY        154519
+
+#ifndef QTRACE_PRINT_OFF
+#define QTRACE_ARG_PRINT(format, ...)   { printf(format, ##__VA_ARGS__); }
+#define QTRACE_WARN(format, ...)        { printf("QEMU_WARN: ");  printf(format, ##__VA_ARGS__); } 
+#define QTRACE_ERROR(format, ...)       { printf("QEMU_ERROR: "); printf(format, ##__VA_ARGS__); }
+#else 
+#define QTRACE_ARG_PRINT(format, ...)
+#define QTRACE_WARN(format, ...)
+#define QTRACE_ERROR(format, ...)
+#endif
 
 /// ------------------------------------------------ ///
 /// instrumentation module metadata 

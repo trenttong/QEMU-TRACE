@@ -99,6 +99,9 @@ void tb_invalidate_phys_range(tb_page_addr_t start, tb_page_addr_t end,
 hwaddr tlb_fetch_xlate_after_refill_no_fail(CPUArchState *env, 
                                target_ulong vaddr, 
                                unsigned mmu_idx);
+void tlb_fetch_xlate_no_fail(CPUArchState *env,
+                             uint32_t offset,
+                             uint64_t bamask);
 void tlb_flush_page(CPUArchState *env, target_ulong addr);
 void tlb_flush(CPUArchState *env, int flush_global);
 void tlb_set_page(CPUArchState *env, target_ulong vaddr,

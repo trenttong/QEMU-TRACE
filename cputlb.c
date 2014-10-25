@@ -249,6 +249,35 @@ hwaddr tlb_fetch_xlate_after_refill_no_fail(CPUArchState *env,
     return env->tlb_table[mmu_idx][page_index].addr_phys | page_offset;
 }
 
+
+void tlb_fetch_xlate_no_fail(CPUArchState *env, uint32_t offset, uint64_t bamask)
+{
+    uintptr_t vaddraddr = (uintptr_t)env + offset;
+    target_ulong vaddr = *(uint64_t*)(vaddraddr) & bamask;
+    unsigned mmu_idx = cpu_mmu_index(env);
+
+    if (mmu_idx != 0)
+    {
+        printf("mmu_idx is %d\n", mmu_idx);
+    }
+    unsigned page_offset= (vaddr & ((1<<TARGET_PAGE_BITS)-1));
+    unsigned page_index = (vaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+    if (unlikely(env->tlb_table[mmu_idx][page_index].addr_read!=
+                (vaddr & (TARGET_PAGE_MASK)))) 
+    {
+        /* we are currently executing the code on this pc. we can safely 
+           assume that it is not going to pagefault, therefore put 0 for the
+           last argument - retaddr */
+        tlb_fill(env, vaddr, 0, mmu_idx, 0);
+    }
+    else
+    {
+        QTRACE_ERROR("failed to xlate vpc to ppc. QTRACE_PCTRACE_PMA broken!\n");
+    }
+    
+    *(uint64_t*)(vaddraddr) = env->tlb_table[mmu_idx][page_index].addr_phys | page_offset; 
+}
+
 /* Add a new TLB entry. At most one entry for a given virtual address
    is permitted. Only a single TARGET_PAGE_SIZE region is mapped, the
    supplied size is only used by tlb_flush_page.  */
