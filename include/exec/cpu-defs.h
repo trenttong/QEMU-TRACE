@@ -32,28 +32,9 @@
 #include "exec/hwaddr.h"
 #endif
 
-#ifndef TARGET_LONG_BITS
-#error TARGET_LONG_BITS must be defined before including this header
-#endif
+#include "cpu-data.h"
 
-#define TARGET_LONG_SIZE (TARGET_LONG_BITS / 8)
 
-/* target_ulong is the type of a virtual address */
-#if TARGET_LONG_SIZE == 4
-typedef int32_t target_long;
-typedef uint32_t target_ulong;
-#define TARGET_FMT_lx "%08x"
-#define TARGET_FMT_ld "%d"
-#define TARGET_FMT_lu "%u"
-#elif TARGET_LONG_SIZE == 8
-typedef int64_t target_long;
-typedef uint64_t target_ulong;
-#define TARGET_FMT_lx "%016" PRIx64
-#define TARGET_FMT_ld "%" PRId64
-#define TARGET_FMT_lu "%" PRIu64
-#else
-#error TARGET_LONG_SIZE undefined
-#endif
 
 #define EXCP_INTERRUPT 	0x10000 /* async interruption */
 #define EXCP_HLT        0x10001 /* hlt instruction reached */
@@ -144,11 +125,11 @@ typedef struct CPUWatchpoint {
 } CPUWatchpoint;
 
 typedef struct CPUFetchStoreShadow {
-    target_ulong vaddr;
-    target_ulong paddr;
-    target_ulong bsize;
-    target_ulong prevalue;
-    target_ulong pstvalue;
+    target_ulong vaddr[2];
+    target_ulong paddr[2];
+    target_ulong bsize[2];
+    target_ulong prevalue[2];
+    target_ulong pstvalue[2];
 } CPUFetchStoreShadow;
 
 #define CPU_TEMP_BUF_NLONGS 128

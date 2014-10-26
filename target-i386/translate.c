@@ -200,11 +200,6 @@ typedef struct DisasContext {
     unsigned module_call_count; 
 } DisasContext;
 
-/* For QTrace */
-///static DisasContext stmp;
-//#define QTRACE_PUSH_DISASCONTEXT(s)    { stmp = *s; }
-//#define QTRACE_POP_DISASCONTEXT(s)     { *s = stmp; }
-
 static void gen_eob(DisasContext *s);
 static void gen_jmp(DisasContext *s, target_ulong eip);
 static void gen_jmp_tb(DisasContext *s, target_ulong eip, int tb_num);
@@ -463,7 +458,6 @@ static void qtrace_create_preinst_reg_shadow(InstrumentContext *ictx,
     if (!QTRACE_ISPREINST_INSTRUMENT(ictx)) return;
 
     tcg_gen_op2i(INDEX_op_qtrace_shadow_register, offset, rmsize); 
-    /* done */
 }
 
 /// @ qtrace_interpret_instrument_requirements - this function is called before any
@@ -550,16 +544,27 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
                  ADVANCE_INSTRUMENT_CONTEXT_OP_UNARY(idx);
                  break;
             /// ---------------------------------- ///
+            /// branch trace.
+            /// ---------------------------------- ///
+            case QTRACE_BRANCHTRACE_TARGET:
+                 /* get the branch target address*/
+                 icontext->iargs[idx+0] = QTRACE_REGTRACE_VALUE_FETCH;
+                 icontext->iargs[idx+1] = QTRACE_X86_RIP;
+                 icontext->iargs[idx+2] = 0;
+                 if (QTRACE_ISPREINST_INSTRUMENT(icontext))
+                 {
+                     QTRACE_ERROR("QTRACE_BRANCHTRACE_TARGET must have post-inst insertion point\n");
+                 }
+                 break;
+            /// ---------------------------------- ///
             /// process ID trace.
             /// ---------------------------------- ///
             case QTRACE_PROCESS_UPID:
                  /* use CR[3] as the UPID on X86 */
                  /* override with frontend specific offset */
-                 icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE;
-                 icontext->iargs[idx+1] = R_CR3;   /* register to trace */
-                 icontext->iargs[idx+2] = 0;        /* size of register to trace */
-                 /* backup one argument and re-evaluate */
-                 --idx;
+                 icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE_FETCH;
+                 icontext->iargs[idx+1] = QTRACE_X86_PROCESS_UPID;   
+                 icontext->iargs[idx+2] = 0;        
                  break;
             /// ---------------------------------- ///
             /// memory trace
@@ -613,19 +618,6 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
                  s->instrument_memory |= icontext->iargs[idx++];
                  /* override with frontend specific offset */
                  icontext->iargs[idx] = OFS(store_shadow.pstvalue);
-                 break;
-            /// ---------------------------------- ///
-            /// branch trace.
-            /// ---------------------------------- ///
-            case QTRACE_BRANCHTRACE_TARGET:
-                 /* get the branch target address*/
-                 icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE;
-                 icontext->iargs[idx+1] = QTRACE_X86_RIP;
-                 idx = idx - 1;
-                 if (QTRACE_ISPREINST_INSTRUMENT(icontext))
-                 {
-                     QTRACE_ERROR("QTRACE_BRANCHTRACE_TARGET must have post instruction insertion point");
-                 }
                  break;
             default:
                  ++idx;

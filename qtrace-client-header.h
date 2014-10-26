@@ -31,6 +31,7 @@ static int main(void) __attribute__((constructor));
 /* functions to ask QTRACE to insert instrumentation */
 static QTRACE_INSERT_INSTRUMENT QTRACE_INSTRUCTION_INSTRUMENT;
 static QTRACE_INSERT_INSTRUMENT QTRACE_BASICBLOCK_INSTRUMENT;
+static QTRACE_WALK_PAGETABLE    QTRACE_TRANSLATE_VIRTUAL_ADDR;
 
 unsigned InstructionCallBackNum = 0;
 unsigned BasicBlockCallBackNum  = 0;
@@ -45,9 +46,10 @@ GenericRtnContainer* BasicBlockCallBackArray[QTRACE_MAX_CALLBACK_NUM] = {0};
 GenericRtnContainer* UserDefineCallBackArray[QTRACE_MAX_CALLBACK_NUM] = {0};
 
 /* hook up the QTRACE function to insert instrumentation */
-void InitializeInstructionInstrument(QTRACE_INSERT_INSTRUMENT rtn)
+void InitializeInstructionInstrument(void **rtns)
 {
-    QTRACE_INSTRUCTION_INSTRUMENT = rtn;
+    QTRACE_INSTRUCTION_INSTRUMENT = rtns[QTRACE_PARSER_INDEX];
+    QTRACE_TRANSLATE_VIRTUAL_ADDR = rtns[QTRACE_PAGETABLE_INDEX];
 }
 
 /* hook up the QTRACE function to insert instrumentation */

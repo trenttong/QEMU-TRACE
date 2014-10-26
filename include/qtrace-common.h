@@ -105,6 +105,47 @@ typedef struct {
     char mname[128];
 } DebugChannel;
 
+
+/// ------------------------------------------------ ///
+/// qtrace xlation support. 
+/// ------------------------------------------------ ///
+enum 
+QTRACE_XLATE_FAULT
+{
+    QTRACE_XLATE_NOPRESENT_FAULT = 0x1,
+    QTRACE_XLATE_PERM_FAULT      = 0x2,
+};
+
+enum 
+QTRACE_INSTRUMENT_PAGE_PERM
+{
+    QTRACE_PAGE_FETCH=0,
+    QTRACE_PAGE_WRITE,
+    QTRACE_PAGE_EXEC,
+};
+
+/// ------------------------------------------------ ///
+/// pagewalk context. 
+/// ------------------------------------------------ ///
+/// PageWalkContext - this structure contains information gathered in a
+/// single page walk. 
+typedef struct pagewalk {
+    uint64_t vaddr;             /* virtual  address of the page walk */
+    uint64_t paddr;             /* physcial address of the page walk */
+    uint64_t xlation_fail;      /* reason of failure for the pagewalk */
+} PageWalkContext;
+
+/// ------------------------------------------------ ///
+/// qtrace runtime provided functions to plugins. 
+/// ------------------------------------------------ ///
+enum 
+QTRACE_INSTRUMENT_RUNTIME 
+{
+    QTRACE_PARSER_INDEX         = 0x0,
+    QTRACE_PAGETABLE_INDEX      = 0x1,
+    QTRACE_INSTRUMENT_RUNTIME_MAXF,
+};
+
 /// ------------------------------------------------ ///
 /// qtrace global variables. 
 /// ------------------------------------------------ ///

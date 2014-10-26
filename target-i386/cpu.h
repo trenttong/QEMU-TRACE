@@ -929,6 +929,10 @@ typedef struct CPUX86State {
     uint64_t shadowcpu_offset;
 
     /* QTRACE - memory shadowing */
+    int multipage_fetch;
+    int multipage_store;
+    int multipage_fetch_count;
+    int multipage_store_count;
     CPUFetchStoreShadow fetch_shadow;
     CPUFetchStoreShadow store_shadow; 
 } CPUX86State;

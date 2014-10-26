@@ -189,7 +189,10 @@ typedef
 void (*QTRACE_INSERT_INSTRUMENT)(unsigned, ...);
 
 typedef 
-void (*QTRACE_MODULE_FINIT)(QTRACE_INSERT_INSTRUMENT);
+void (*QTRACE_MODULE_INIT)(void**);
+
+typedef 
+void (*QTRACE_WALK_PAGETABLE)(int, bool, PageWalkContext*);
 
 /// ------------------------------------------------ ///
 /// instrumentation function list

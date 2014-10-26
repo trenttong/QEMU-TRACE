@@ -61,7 +61,7 @@
 
 #endif /* CONFIG_LINUX */
 
-static CPUState *next_cpu;
+CPUState *next_cpu;
 
 bool cpu_is_stopped(CPUState *cpu)
 {

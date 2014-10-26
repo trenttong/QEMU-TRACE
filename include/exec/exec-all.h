@@ -42,6 +42,7 @@ typedef ram_addr_t tb_page_addr_t;
 
 struct TranslationBlock;
 typedef struct TranslationBlock TranslationBlock;
+extern CPUState *next_cpu;
 
 /* XXX: make safe guess about sizes */
 #define MAX_OP_PER_INSTR 208
@@ -342,6 +343,8 @@ bool io_mem_write(struct MemoryRegion *mr, hwaddr addr,
 
 void tlb_fill(CPUArchState *env1, target_ulong addr, int is_write, int mmu_idx,
               uintptr_t retaddr);
+void cpu_x86_xlate_by_walking_pt(CPUArchState *env, target_ulong addr, int is_write, 
+                                 PageWalkContext *ret);
 
 uint8_t helper_ldb_cmmu(CPUArchState *env, target_ulong addr, int mmu_idx);
 uint16_t helper_ldw_cmmu(CPUArchState *env, target_ulong addr, int mmu_idx);

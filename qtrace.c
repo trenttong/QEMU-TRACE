@@ -23,6 +23,7 @@
 #include "cpu.h"
 #include "qtrace.h"
 #include "config.h"
+#include "exec/cpu-data.h"
 
 /// ------------------------------------------------ ///
 /// frontend compiling for. 
@@ -274,6 +275,9 @@ void qtrace_instrument_x86_parser(unsigned pos, ...)
            /* reserve for instrumentation size */
            RESERVE_INSTRUMENT_CONTEXT_ARG_BASIZE(ictxhead);
            break;
+      /// ---------------------------------- ///
+      //// program counter trace. */
+      /// ---------------------------------- ///
       case QTRACE_PCTRACE_VMA:
            /* record the instrumentation type */
            ictxhead->iargs[ictxhead->ciarg++] = arg;
@@ -357,6 +361,16 @@ label_end_arg:
    /* briefly verify the validity of the instrumentations */
    qtrace_icontext_sanity_check(ictxhead);
 }
+
+static void qtrace_walk_cpu_pagetable(target_ulong vaddr, int iswrite, PageWalkContext *ret)
+{
+#if TARGET_X86_64 == 1
+    cpu_x86_xlate_by_walking_pt(next_cpu->env_ptr, vaddr, iswrite, ret);
+#endif
+}
+
+/// @ keeps all the qtrace runtime functions the instrumentation client could use.
+void *qtrace_instrument_runtime[QTRACE_INSTRUMENT_RUNTIME_MAXF];
 
 /// @ qtrace_instrument_parse - this function takes the name of the module and setup
 /// @ the module. it loads the module first and then passes the module the function to 
@@ -446,10 +460,16 @@ void qtrace_instrument_setup(const char *module)
     }
 
     /* register instrumentation parsing functions with the instrumentation module */
-    QTRACE_MODULE_FINIT module_finit = (QTRACE_MODULE_FINIT) 
-                                       dlsym(handle, InitInsInstrumentName);
-    assert(module_finit);
-    module_finit(qtrace_instrument_parser);
+    QTRACE_MODULE_INIT module_initf = (QTRACE_MODULE_INIT) 
+                                      dlsym(handle, InitInsInstrumentName);
+    assert(module_initf);
+
+    /* initialize the qtrace runtime structure */
+    qtrace_instrument_runtime[QTRACE_PARSER_INDEX]    = (void*)qtrace_instrument_parser;
+    qtrace_instrument_runtime[QTRACE_PAGETABLE_INDEX] = (void*)qtrace_walk_cpu_pagetable;
+
+    /* done. give it to the plugin */
+    module_initf((void**)&qtrace_instrument_runtime);
 
     /* done */
     return;

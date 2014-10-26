@@ -120,6 +120,7 @@
 #define QTRACE_X86_CR2 R_CR2
 #define QTRACE_X86_CR3 R_CR3
 #define QTRACE_X86_CR4 R_CR4
+#define QTRACE_X86_PROCESS_UPID QTRACE_X86_CR3
 
 /* timestamp counter register */
 #define R_TSC 107 
