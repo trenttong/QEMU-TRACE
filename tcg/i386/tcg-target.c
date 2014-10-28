@@ -1488,6 +1488,7 @@ static void tcg_out_qemu_ld_slow_path(TCGContext *s, TCGLabelQemuLdst *l)
     default:
         tcg_abort();
     }
+    
 
     /* Jump to the code corresponding to next IR of qemu_st */
     tcg_out_jmp(s, (uintptr_t)l->raddr);
@@ -1735,6 +1736,10 @@ static void tcg_out_qemu_ld(TCGContext *s, const TCGArg *args, bool is64)
     /* Record the current context of a load into ldst label */
     add_qemu_ldst_label(s, 1, opc, datalo, datahi, addrlo, addrhi,
                         mem_index, s->code_ptr, label_ptr);
+
+    /* Assemble in case of MDA */
+    tcg_out_mov(s, TCG_TYPE_PTR, tcg_target_call_iarg_regs[0], TCG_AREG0);
+    tcg_out_calli(s, (uintptr_t)qtrace_assemble_fetch_mda);
 #else
     {
         int32_t offset = GUEST_BASE;
@@ -1903,6 +1908,10 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, bool is64)
     /* Record the current context of a store into ldst label */
     add_qemu_ldst_label(s, 0, opc, datalo, datahi, addrlo, addrhi,
                         mem_index, s->code_ptr, label_ptr);
+
+    /* Assemble in case of MDA */
+    tcg_out_mov(s, TCG_TYPE_PTR, tcg_target_call_iarg_regs[0], TCG_AREG0);
+    tcg_out_calli(s, (uintptr_t)qtrace_assemble_store_mda);
 #else
     {
         int32_t offset = GUEST_BASE;

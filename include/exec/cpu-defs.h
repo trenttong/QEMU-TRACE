@@ -125,11 +125,11 @@ typedef struct CPUWatchpoint {
 } CPUWatchpoint;
 
 typedef struct CPUFetchStoreShadow {
-    target_ulong vaddr[2];
-    target_ulong paddr[2];
-    target_ulong bsize[2];
-    target_ulong prevalue[2];
-    target_ulong pstvalue[2];
+    target_ulong vaddr[8];
+    target_ulong paddr[8];
+    target_ulong bsize[8];
+    target_ulong prevalue[8];
+    target_ulong pstvalue[8];
 } CPUFetchStoreShadow;
 
 #define CPU_TEMP_BUF_NLONGS 128

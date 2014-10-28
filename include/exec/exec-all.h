@@ -381,6 +381,9 @@ static inline tb_page_addr_t get_page_addr_code(CPUArchState *env1, target_ulong
 tb_page_addr_t get_page_addr_code(CPUArchState *env1, target_ulong addr);
 #endif
 
+void qtrace_assemble_fetch_mda(CPUArchState *env);
+void qtrace_assemble_store_mda(CPUArchState *env);
+
 typedef void (CPUDebugExcpHandler)(CPUArchState *env);
 
 void cpu_set_debug_excp_handler(CPUDebugExcpHandler *handler);

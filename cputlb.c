@@ -389,6 +389,51 @@ tb_page_addr_t get_page_addr_code(CPUArchState *env1, target_ulong addr)
     return qemu_ram_addr_from_host_nofail(p);
 }
 
+void qtrace_assemble_fetch_mda(CPUArchState *env)
+{
+    int idx;
+    target_ulong preres = 0, pstres = 0;
+    hwaddr addr1, addr2;
+    if (env->multipage_fetch) 
+    {
+        /* go through every byte load and assemble the load value */
+        for (idx = 0; idx < env->multipage_fetch_count; ++idx) 
+        {
+            preres <<= 8;
+            pstres <<= 8;
+            preres |= env->fetch_shadow.prevalue[idx];
+            pstres |= env->fetch_shadow.prevalue[idx];
+        }
+        env->fetch_shadow.prevalue[0] = preres;
+        env->fetch_shadow.pstvalue[1] = pstres;
+
+        addr1 = env->fetch_shadow.paddr[0];
+        /* go through every byte load and assemble the load value */
+        for (idx = 0; idx < env->multipage_fetch_count; ++idx) 
+        {
+            addr2 = env->fetch_shadow.paddr[idx];
+            if ((addr1 & TARGET_PAGE_MASK) != (addr2 &TARGET_PAGE_MASK))
+            break;
+        }
+
+        env->fetch_shadow.paddr[0] = addr1;
+        env->fetch_shadow.paddr[1] = addr2;
+
+
+        env->multipage_fetch       = 0;
+        env->multipage_fetch_count = 0;
+    }
+}
+
+void qtrace_assemble_store_mda(CPUArchState *env)
+{
+    env->multipage_fetch = 0;
+    env->multipage_store = 0;
+    env->multipage_fetch_count = 0;
+    env->multipage_store_count = 0;
+}
+
+
 #define MMUSUFFIX _cmmu
 #undef GETPC
 #define GETPC() ((uintptr_t)0)
