@@ -29,30 +29,33 @@
 /// ------------------------------------------------ ///
 #define QTRACE_RESET_INST_TYPE_FLAG(s)              (s->qtrace_insnflags=0)
 #define QTRACE_ADD_INST_TYPE_FLAG(s,flg)            (s->qtrace_insnflags|=(flg))
-#define QTRACE_SUB_INST_TYPE_FLAG(s,flg)            (s->qtrace_insnflags&=~(flg))
 #define QTRACE_ADD_COND_INST_TYPE_FLAG(s,flg,c)     {if(c) QTRACE_ADD_INST_TYPE_FLAG(s, flg);}
-#define QTRACE_SUB_COND_INST_TYPE_FLAG(s,flg,c)     {if(c) QTRACE_SUB_INST_TYPE_FLAG(s, flg);}
-#define RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictx)   {ictx->iargs[ictx->ciarg++] = 0;}
-#define RESERVE_INSTRUMENT_CONTEXT_ARG(ictx)        RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictx); 
-#define RESERVE_INSTRUMENT_CONTEXT_ARG_OFFSET(ictx) RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictx); 
-#define RESERVE_INSTRUMENT_CONTEXT_ARG_BASIZE(ictx) RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictx);
 
-#define RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictx)   \
+/// ------------------------------------------------ ///
+/// reserve instrumentation space . 
+/// ------------------------------------------------ ///
+#define QTRACE_RESERVE_ICONTEXT_ARGUMENT(ictx)      {ictx->iargs[ictx->ciarg++] = 0;}
+#define QTRACE_RESERVE_ICONTEXT_ARG(ictx)           QTRACE_RESERVE_ICONTEXT_ARGUMENT(ictx); 
+#define QTRACE_RESERVE_ICONTEXT_ARG_OFFSET(ictx)    QTRACE_RESERVE_ICONTEXT_ARGUMENT(ictx); 
+#define QTRACE_RESERVE_ICONTEXT_ARG_BASIZE(ictx)    QTRACE_RESERVE_ICONTEXT_ARGUMENT(ictx);
+
+#define QTRACE_RESERVE_ICONTEXT_OP_UNARY(ictx)      \
 do  {                                               \
-    RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictx);      \
-    RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictx);      \
-    RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictx);      \
+    QTRACE_RESERVE_ICONTEXT_ARGUMENT(ictx);         \
+    QTRACE_RESERVE_ICONTEXT_ARGUMENT(ictx);         \
+    QTRACE_RESERVE_ICONTEXT_ARGUMENT(ictx);         \
 } while(0);
 
-#define RESERVE_INSTRUMENT_CONTEXT_OP_BINARY(ictx)  \
+#define QTRACE_RESERVE_ICONTEXT_OP_BINARY(ictx)     \
 do  {                                               \
-    RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictx);      \
-    RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictx);      \
-    RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictx);      \
+    QTRACE_RESERVE_ICONTEXT_OP_UNARY(ictx);         \
+    QTRACE_RESERVE_ICONTEXT_OP_UNARY(ictx);         \
+    QTRACE_RESERVE_ICONTEXT_OP_UNARY(ictx);         \
 } while(0);
 
-#define ADVANCE_INSTRUMENT_CONTEXT_OP_UNARY(x)      { x += 3; }
-#define ADVANCE_INSTRUMENT_CONTEXT_OP_BINARY(x)     { x += 9; }
+/* every QTRACE unary opcode has 1 opcode and 2 operands */
+#define QTRACE_ADVANCE_ICONTEXT_OP_UNARY(x)         { x += 3; }
+#define QTRACE_ADVANCE_ICONTEXT_OP_BINARY(x)        { x += 9; }
 
 /// ------------------------------------------- 
 /// general facility.
@@ -169,6 +172,30 @@ do  {                                               \
 #define QTRACE_ICONTEXT_OPERATOR_UNARYXLATE         (1UL << 31)
 #define QTRACE_ICONTEXT_OPERATOR_BINARYSUM_NOARG    (1UL << 32)
 #define QTRACE_ICONTEXT_OPERATOR_NOARG(x)           (x&QTRACE_ICONTEXT_OPERATOR_BINARYSUM_NOARG)
+
+#define QTRACE_ASSEMBLE_MULTIBYTE_VALUE(idx, address)         \
+({                                                            \
+    int i;                                                    \
+    target_ulong val;                                         \
+    for (i = 0; i < idx; ++i)                                 \
+    {                                                         \
+        val <<= 8; val |= address[i];                         \
+    }                                                         \
+    val;                                                      \
+})
+
+#define QTRACE_FIND_DIFFERENT_PAGE(currpage, address)         \
+({                                                            \
+    hwaddr nextpage;                                          \
+    for (idx = 0; idx < env->multipage_fetch_count; ++idx)    \
+    {                                                         \
+        nextpage = address[idx];                              \
+        if ((currpage & TARGET_PAGE_MASK) !=                  \
+            (nextpage &TARGET_PAGE_MASK))                     \
+            break;                                            \
+    }                                                         \
+    nextpage;                                                 \
+})
 
 /// ------------------------------------------------ ///
 /// instrumentation prototypes. 

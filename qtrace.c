@@ -197,7 +197,6 @@ void qtrace_icontext_sanity_check(InstrumentContext *ictx)
    if (!ictx->ifun) QTRACE_ERROR("icontext ifun is NULL\n"); 
 }
 
-
 /// @ qtrace calls instrumentation function after the instruction is emulated.
 /// @ as a result, qtrace shadows (backs up) any architectural states that are
 /// @ modified as a result of the currently instrumented instruction.
@@ -208,7 +207,7 @@ void qtrace_icontext_sanity_check(InstrumentContext *ictx)
 /// @ for every instruction, there is a pre-inst instrumentation callback and
 /// @ a post-inst instrumentation callback. the instrumentation callbacks have
 /// @ 2 parts. in the first part, it allows qtrace to create any
-
+///
 /// @ qtrace_instrument - this function is called by the instrumentatiom module.
 /// @ it parses what is requested by the instrumentation module into a icontext
 /// @ structure.
@@ -228,9 +227,7 @@ void qtrace_instrument_x86_parser(unsigned pos, ...)
    qtrace_allocate_new_icontext(&rootarray[CURRENT_ROOT]);
 
    InstrumentContext *ictxhead = rootarray[CURRENT_ROOT];
-   
-   /* 
-      stage 1.
+   /* stage 1.
       setup necessary instrumentation types as well as their frontend agonistic 
       parameters and slots. this setup is then interpreted and modified by 
       different frontend before invoking the TCG on them.
@@ -244,28 +241,33 @@ void qtrace_instrument_x86_parser(unsigned pos, ...)
       stage 3.
       frontend looks at the name of the register and figure out its instrumentation
       offset as well as the instrumentation size. this information is then recorded
-      in the same place in the icontext structure and passed to the backend. 
-   */
-
+      in the same place in the icontext structure and passed to the backend. */
    unsigned idx=0;
    for (idx=0;idx<pos;++idx) 
    {
       uint64_t arg = va_arg(arguments, unsigned);
       switch (arg)
       {
+      /// ---------------------------------- ///
+      /// insertion point                    /// 
+      /// ---------------------------------- ///
       case QTRACE_IPOINT_BEFORE:
       case QTRACE_IPOINT_AFTER:
            ictxhead->ipoint = arg; 
            break;
       /// ---------------------------------- ///
-      /// instrumentation function address 
+      /// instrumentation function address   /// 
       /// ---------------------------------- ///
       case QTRACE_IFUN:
            ictxhead->ifun = va_arg(arguments, uintptr_t);
            ++idx;
            break;
       /// ---------------------------------- ///
-      //// register trace. */
+      ///  register trace.                   ///
+      ///                                    ///
+      ///  IR : REGTRACE_OPCODE,             ///
+      ///       offset,                      ///
+      ///       size.                        ///
       /// ---------------------------------- ///
       case QTRACE_REGTRACE_VALUE:
            /* record the instrumentation type */
@@ -273,32 +275,65 @@ void qtrace_instrument_x86_parser(unsigned pos, ...)
            /* this will be modified into offset by frontends */
            ictxhead->iargs[ictxhead->ciarg++] = va_arg(arguments, unsigned);
            /* reserve for instrumentation size */
-           RESERVE_INSTRUMENT_CONTEXT_ARG_BASIZE(ictxhead);
+           QTRACE_RESERVE_ICONTEXT_ARG_BASIZE(ictxhead);
            break;
       /// ---------------------------------- ///
-      //// program counter trace. */
-      /// ---------------------------------- ///
+      /// virtual program counter trace.     ///
+      ///                                    ///
+      /// X86 : PC = RIP + CS;               ///
+      ///                                    ///
+      /// QTRACE_ICONTEXT_OPERATOR_BINARYSUM ///
+      ///   QTRACE_REGTRACE_VALUE_STORE      ///
+      ///   compute_pc,                      ///
+      ///   size.                            ///
+      ///   QTRACE_REGTRACE_VALUE_FETCH      ///
+      ///   RIP,                             ///
+      ///   size.                            ///
+      ///   QTRACE_REGTRACE_VALUE_FETCH      ///
+      ///   CS,                              ///
+      ///   size.                            ///
+      /// ---------------------------------- /// 
       case QTRACE_PCTRACE_VMA:
            /* record the instrumentation type */
            ictxhead->iargs[ictxhead->ciarg++] = arg;
            /* computed eip + cs_base */
-           RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictxhead);
+           QTRACE_RESERVE_ICONTEXT_OP_UNARY(ictxhead);
            /* eip */
-           RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictxhead);
+           QTRACE_RESERVE_ICONTEXT_OP_UNARY(ictxhead);
            /* cs_base */
-           RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictxhead);
+           QTRACE_RESERVE_ICONTEXT_OP_UNARY(ictxhead);
            break;
+      /// ---------------------------------- ///
+      /// physical program counter trace.    ///
+      ///                                    ///
+      /// X86 : PC = xlate(RIP + CS);        ///
+      ///                                    ///
+      /// QTRACE_ICONTEXT_OPERATOR_BINARYSUM ///
+      ///   QTRACE_REGTRACE_VALUE_STORE      ///
+      ///   compute_pc,                      ///
+      ///   size.                            ///
+      ///   QTRACE_REGTRACE_VALUE_FETCH      ///
+      ///   RIP,                             ///
+      ///   size.                            ///
+      ///   QTRACE_REGTRACE_VALUE_FETCH      ///
+      ///   CS,                              ///
+      ///   size.                            ///
+      ///                                    ///
+      /// QTRACE_ICONTEXT_OPERATOR_UNARYXLATE///
+      /// compute_pc,                        ///
+      /// size                               ///
+      /// ---------------------------------- /// 
       case QTRACE_PCTRACE_PMA:
            /* record the instrumentation type */
            ictxhead->iargs[ictxhead->ciarg++] = arg;
            /* computed eip + cs_base */
-           RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictxhead);
+           QTRACE_RESERVE_ICONTEXT_OP_UNARY(ictxhead);
            /* eip */
-           RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictxhead);
+           QTRACE_RESERVE_ICONTEXT_OP_UNARY(ictxhead);
            /* cs_base */
-           RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictxhead);
+           QTRACE_RESERVE_ICONTEXT_OP_UNARY(ictxhead);
            /* xlate node */
-           RESERVE_INSTRUMENT_CONTEXT_OP_UNARY(ictxhead);
+           QTRACE_RESERVE_ICONTEXT_OP_UNARY(ictxhead);
            break;
       /// ---------------------------------- ///
       //// miscellaneous register trace. */
@@ -307,8 +342,8 @@ void qtrace_instrument_x86_parser(unsigned pos, ...)
       case QTRACE_BRANCHTRACE_TARGET:
            /* shall be converted to regtrace in the frontend */
            ictxhead->iargs[ictxhead->ciarg++] = arg;
-           RESERVE_INSTRUMENT_CONTEXT_ARG_OFFSET(ictxhead);
-           RESERVE_INSTRUMENT_CONTEXT_ARG_BASIZE(ictxhead);
+           QTRACE_RESERVE_ICONTEXT_ARG_OFFSET(ictxhead);
+           QTRACE_RESERVE_ICONTEXT_ARG_BASIZE(ictxhead);
            break;
       /// ---------------------------------- ///
       /// memory address instrumentation */
@@ -323,7 +358,7 @@ void qtrace_instrument_x86_parser(unsigned pos, ...)
       case QTRACE_MEMTRACE_STORE_MSIZE:
            ictxhead->memfext |= arg;
            ictxhead->iargs[ictxhead->ciarg++] = arg;
-           RESERVE_INSTRUMENT_CONTEXT_ARG_OFFSET(ictxhead);
+           QTRACE_RESERVE_ICONTEXT_ARG_OFFSET(ictxhead);
            break;
       /// ---------------------------------- ///
       ////memory value instrumentation */
@@ -333,7 +368,7 @@ void qtrace_instrument_x86_parser(unsigned pos, ...)
                   QTRACE_MEMTRACE_FETCH_PREOP_VALUE :
                   QTRACE_MEMTRACE_FETCH_PSTOP_VALUE ;
            ictxhead->iargs[ictxhead->ciarg++]  = arg;
-           RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictxhead);
+           QTRACE_RESERVE_ICONTEXT_ARGUMENT(ictxhead);
            ictxhead->memfext |= arg;
            break;
       case QTRACE_MEMTRACE_STORE_VALUE:
@@ -341,7 +376,7 @@ void qtrace_instrument_x86_parser(unsigned pos, ...)
                   QTRACE_MEMTRACE_STORE_PREOP_VALUE :
                   QTRACE_MEMTRACE_STORE_PSTOP_VALUE ;
            ictxhead->iargs[ictxhead->ciarg++]  = arg;
-           RESERVE_INSTRUMENT_CONTEXT_ARGUMENT(ictxhead);
+           QTRACE_RESERVE_ICONTEXT_ARGUMENT(ictxhead);
            ictxhead->memfext |= arg;
            break;
       case QTRACE_END_ARG:

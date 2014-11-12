@@ -34,9 +34,9 @@ static void GPRTracePrint##size(const char* name,                 \
                               type r15,                           \
                               type rip)                           \
 {                                                                 \
-QTRACE_PRINT("%s %8x %8x %8x %8x %8x %8x %8x %8x %8x %8x %8x %8x %8x %8x %8x %8x %8x\n",       \
-             name, rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi, r8, r9,\
-             r10, r11, r12, r13, r14, r15, rip);                  \
+QTRACE_ARG_PRINT("%s %8lx %8lx %8lx %8lx %8lx %8lx %8lx %8lx %8lx %8lx %8lx %8lx %8lx %8lx %8lx %8lx %8lx\n",       \
+                  name, rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi, r8, r9,\
+                  r10, r11, r12, r13, r14, r15, rip);                  \
 }
 
 GPRTracePrint(8,  uint8_t,  regsim8name);
@@ -119,7 +119,7 @@ static void RegTrace##position##Inst(uint64_t rax,                  \
                                      uint8_t  bh)                   \
                                                                     \
 {                                                                   \
-   QTRACE_PRINT("---- REGTRACE: %s Instrumentation ---- \n", misc);     \
+   QTRACE_ARG_PRINT("---- REGTRACE: %s Instrumentation ---- \n", misc); \
    GPRTracePrint64(regsim64name, rax, rcx, rdx, rbx, rsp, rbp, rsi,     \
                  rdi, r8, r9, r10, r11, r12, r13, r14, r15, rip);       \
    GPRTracePrint32(regsim32name, eax, ecx, edx, ebx, esp, ebp, esi,     \
@@ -132,7 +132,7 @@ static void RegTrace##position##Inst(uint64_t rax,                  \
                 r8b, r9b, r10b, r11b, r12b, r13b, r14b, r15b, 0);       \
    GPRTracePrint8(regsim8hname, ah, ch, dh, bh,0, 0, 0, 0, 0, 0,        \
                 0, 0, 0, 0, 0, 0, 0);                                   \
-   QTRACE_PRINT("**** REGTRACE: %s Instrumentation ****\n\n", misc);    \
+   QTRACE_ARG_PRINT("**** REGTRACE: %s Instrumentation ****\n\n", misc);\
 }                          
 
 GPRTraceInst(Pre, "preinst")
@@ -444,11 +444,10 @@ void InstructionCallBack(unsigned type)
                                   QTRACE_X86_BH,
                                   QTRACE_END_ARG);
 #endif
-
 }
 
-void StatsReset() { QTRACE_PRINT("REGTRACE: StatsReset\n"); }
-void StatsPrint() { QTRACE_PRINT("REGTRACE: StatsPrint\n"); }
+void StatsReset() { QTRACE_ARG_PRINT("REGTRACE: StatsReset\n"); }
+void StatsPrint() { QTRACE_ARG_PRINT("REGTRACE: StatsPrint\n"); }
 
 int main(void)
 {

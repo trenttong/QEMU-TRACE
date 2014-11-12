@@ -392,37 +392,24 @@ tb_page_addr_t get_page_addr_code(CPUArchState *env1, target_ulong addr)
 void qtrace_assemble_fetch_mda(CPUArchState *env)
 {
     int idx;
-    target_ulong preres = 0, pstres = 0;
-    hwaddr addr1, addr2;
+    hwaddr page_first, page_second;
+    CPUFetchStoreShadow *b = &env->fetch_shadow;
     if (env->multipage_fetch) 
     {
+        b->paddr[1]    = QTRACE_FIND_DIFFERENT_PAGE(env->multipage_fetch_count,
+                                                    env->fetch_shadow.paddr);
+
         /* go through every byte load and assemble the load value */
-        for (idx = 0; idx < env->multipage_fetch_count; ++idx) 
-        {
-            preres <<= 8;
-            pstres <<= 8;
-            preres |= env->fetch_shadow.prevalue[idx];
-            pstres |= env->fetch_shadow.prevalue[idx];
-        }
-        env->fetch_shadow.prevalue[0] = preres;
-        env->fetch_shadow.pstvalue[1] = pstres;
+        b->prevalue[0] = QTRACE_ASSEMBLE_MULTIBYTE_VALUE(env->multipage_fetch_count, 
+                                                         env->fetch_shadow.prevalue);
+        b->pstvalue[0] = QTRACE_ASSEMBLE_MULTIBYTE_VALUE(env->multipage_fetch_count, 
+                                                         env->fetch_shadow.pstvalue);
 
-        addr1 = env->fetch_shadow.paddr[0];
-        /* go through every byte load and assemble the load value */
-        for (idx = 0; idx < env->multipage_fetch_count; ++idx) 
-        {
-            addr2 = env->fetch_shadow.paddr[idx];
-            if ((addr1 & TARGET_PAGE_MASK) != (addr2 &TARGET_PAGE_MASK))
-            break;
-        }
-
-        env->fetch_shadow.paddr[0] = addr1;
-        env->fetch_shadow.paddr[1] = addr2;
-
-
-        env->multipage_fetch       = 0;
-        env->multipage_fetch_count = 0;
     }
+    /* reset */
+    env->multipage_fetch       = 0;
+    env->multipage_fetch_count = 0;
+    return;
 }
 
 void qtrace_assemble_store_mda(CPUArchState *env)

@@ -2123,7 +2123,7 @@ static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *ic
         switch(icontext->iargs[idx])
         {
         /// ---------------------------------- ///
-        /// unary xlate. 
+        /// unary xlate.                       /// 
         /// ---------------------------------- ///
         case QTRACE_ICONTEXT_OPERATOR_UNARYXLATE:
              tcg_out_qtrace_instrument_handle_unaryxlate(s, icontext, 
@@ -2131,9 +2131,10 @@ static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *ic
                                                          &dst_opcode, 
                                                          &dst_offset, 
                                                          &dst_bamask);
+             /* assign the result destination offset and size mask */
              param_offset = dst_offset;
              param_bamask = dst_bamask;
-             ADVANCE_INSTRUMENT_CONTEXT_OP_UNARY(idx);
+             QTRACE_ADVANCE_ICONTEXT_OP_UNARY(idx);
              break;
         /// ---------------------------------- ///
         /// binary sum. 
@@ -2149,21 +2150,21 @@ static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *ic
                                                        &dst_opcode, 
                                                        &dst_offset, 
                                                        &dst_bamask);
-             ADVANCE_INSTRUMENT_CONTEXT_OP_UNARY(idx);
+             QTRACE_ADVANCE_ICONTEXT_OP_UNARY(idx);
 
              tcg_out_qtrace_instrument_handle_unarymem(s, icontext, 
                                                        idx, 
                                                        &op1_opcode, 
                                                        &op1_offset, 
                                                        &op1_bamask);
-             ADVANCE_INSTRUMENT_CONTEXT_OP_UNARY(idx);
+             QTRACE_ADVANCE_ICONTEXT_OP_UNARY(idx);
 
              tcg_out_qtrace_instrument_handle_unarymem(s, icontext, 
                                                        idx, 
                                                        &op2_opcode, 
                                                        &op2_offset, 
                                                        &op2_bamask);
-             ADVANCE_INSTRUMENT_CONTEXT_OP_UNARY(idx);
+             QTRACE_ADVANCE_ICONTEXT_OP_UNARY(idx);
 
              tcg_out_qtrace_instrument_handle_binarysum(s, icontext,
                                                         dst_opcode, 
@@ -2176,11 +2177,11 @@ static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *ic
                                                         op2_offset, 
                                                         op2_bamask);
 
-             /* lastly. assign param_offset and param_bamask so that it can be */
-             param_offset = dst_offset;
-             param_bamask = dst_bamask;
              /* do we want to generate an instrumentation arg for this */
              if (no_arg) continue;
+             /* assign the result destination offset and size mask */
+             param_offset = dst_offset;
+             param_bamask = dst_bamask;
              break;
         /// ---------------------------------- ///
         /// unary mem  
@@ -2193,9 +2194,10 @@ static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *ic
                                                        &dst_offset, 
                                                        &dst_bamask);
 
+             /* assign the result destination offset and size mask */
              param_offset = dst_offset;
              param_bamask = dst_bamask;
-             ADVANCE_INSTRUMENT_CONTEXT_OP_UNARY(idx);
+             QTRACE_ADVANCE_ICONTEXT_OP_UNARY(idx);
              break;
         default:
              QTRACE_ERROR("QTRACE - unhandled opcode\n");
@@ -2241,7 +2243,6 @@ static void tcg_out_qtrace_instrument_setup(TCGContext *s, InstrumentContext *ic
 
     /* lastly, make the call */
     tcg_out_calli(s, (uintptr_t)icontext->ifun);
-
     /* need to rewind stack */
     if (stack_totalsize) tcg_out_addi(s, TCG_REG_ESP, stack_totalsize);
 }

@@ -483,7 +483,7 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
             switch(icontext->iargs[idx])
             {
             /// ---------------------------------- ///
-            /// register trace
+            /// register trace                     ///
             /// ---------------------------------- ///
             case QTRACE_REGTRACE_VALUE_FETCH:
             case QTRACE_REGTRACE_VALUE_STORE:
@@ -498,11 +498,24 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
                  qtrace_create_preinst_reg_shadow(icontext, 
                                                   icontext->iargs[idx+1], 
                                                   icontext->iargs[idx+2]);
-                 /* no need to create any shadow IR for pst-inst instrument. */
-                 ADVANCE_INSTRUMENT_CONTEXT_OP_UNARY(idx);
+                 /* we are done with this opcode. move to next opcode . */
+                 QTRACE_ADVANCE_ICONTEXT_OP_UNARY(idx);
                  break;
             /// ---------------------------------- ///
-            /// pc trace. converted into 2 register traces.
+            /// virtual program counter trace.     ///
+            ///                                    ///
+            /// X86 : PC = RIP + CS;               ///
+            ///                                    ///
+            /// QTRACE_ICONTEXT_OPERATOR_BINARYSUM ///
+            ///   QTRACE_REGTRACE_VALUE_STORE      ///
+            ///   compute_pc,                      ///
+            ///   size.                            ///
+            ///   QTRACE_REGTRACE_VALUE_FETCH      ///
+            ///   RIP,                             ///
+            ///   size.                            ///
+            ///   QTRACE_REGTRACE_VALUE_FETCH      ///
+            ///   CS,                              ///
+            ///   size.                            ///
             /// ---------------------------------- ///
             case QTRACE_PCTRACE_VMA:
                  /* register trace with R_RIP */
@@ -516,8 +529,29 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
                  icontext->iargs[idx+7] = QTRACE_REGTRACE_VALUE_FETCH;
                  icontext->iargs[idx+8] = QTRACE_X86_CS;   /* trace cs reg */
                  icontext->iargs[idx+9] = 0;        
+                 /* skip QTRACE_ICONTEXT_OPERATOR_BINARYSUM, its evaled by the backend */
                  ++idx;
                  break;
+            /// ---------------------------------- ///
+            /// physical program counter trace.    ///
+            ///                                    ///
+            /// X86 : PC = xlate(RIP + CS);        ///
+            ///                                    ///
+            /// QTRACE_ICONTEXT_OPERATOR_BINARYSUM ///
+            ///   QTRACE_REGTRACE_VALUE_STORE      ///
+            ///   compute_pc,                      ///
+            ///   size.                            ///
+            ///   QTRACE_REGTRACE_VALUE_FETCH      ///
+            ///   RIP,                             ///
+            ///   size.                            ///
+            ///   QTRACE_REGTRACE_VALUE_FETCH      ///
+            ///   CS,                              ///
+            ///   size.                            ///
+            ///                                    ///
+            /// QTRACE_ICONTEXT_OPERATOR_UNARYXLATE///
+            /// compute_pc,                        ///
+            /// size                               ///
+            /// ---------------------------------- ///
             case QTRACE_PCTRACE_PMA:
                  /* register trace with R_RIP. no instrumentation arg */
                  icontext->iargs[idx+0] = QTRACE_ICONTEXT_OPERATOR_BINARYSUM_NOARG;
@@ -534,17 +568,22 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
                  icontext->iargs[idx+10] = QTRACE_ICONTEXT_OPERATOR_UNARYXLATE;
                  icontext->iargs[idx+11] = R_PRIP;           
                  icontext->iargs[idx+12] = 0;   
+                 /* skip QTRACE_ICONTEXT_OPERATOR_BINARYSUM, its evaled by the backend */
                  ++idx;
                  break;
+            /// ---------------------------------- ///
+            /// translation node                   ///
+            /// ---------------------------------- ///
             case QTRACE_ICONTEXT_OPERATOR_UNARYXLATE:
                  qtrace_get_reg_offset_and_size(s, icontext->iargs[idx+1], &offset, &basize); 
                  icontext->iargs[idx+0] = QTRACE_ICONTEXT_OPERATOR_UNARYXLATE;
                  icontext->iargs[idx+1] = offset;           
                  icontext->iargs[idx+2] = basize;   
-                 ADVANCE_INSTRUMENT_CONTEXT_OP_UNARY(idx);
+                 QTRACE_ADVANCE_ICONTEXT_OP_UNARY(idx);
                  break;
             /// ---------------------------------- ///
-            /// branch trace.
+            /// branch trace. simply read the RIP  ///
+            /// post-instruction.                  ///
             /// ---------------------------------- ///
             case QTRACE_BRANCHTRACE_TARGET:
                  /* get the branch target address*/
@@ -557,11 +596,10 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
                  }
                  break;
             /// ---------------------------------- ///
-            /// process ID trace.
+            /// process ID trace.                  ///
             /// ---------------------------------- ///
             case QTRACE_PROCESS_UPID:
                  /* use CR[3] as the UPID on X86 */
-                 /* override with frontend specific offset */
                  icontext->iargs[idx]   = QTRACE_REGTRACE_VALUE_FETCH;
                  icontext->iargs[idx+1] = QTRACE_X86_PROCESS_UPID;   
                  icontext->iargs[idx+2] = 0;        
@@ -570,60 +608,44 @@ static void qtrace_interpret_instrument_requirements(DisasContext *s)
             /// memory trace
             /// ---------------------------------- ///
             case QTRACE_MEMTRACE_FETCH_VMA:
-                 s->instrument_memory |= icontext->iargs[idx++];
-                 /* override with frontend specific offset */
                  icontext->iargs[idx] = OFS(fetch_shadow.vaddr);
-                 break;
+                 goto instrument_memory_label;
             case QTRACE_MEMTRACE_FETCH_PMA:
-                 s->instrument_memory |= icontext->iargs[idx++];
-                 /* override with frontend specific offset */
                  icontext->iargs[idx] = OFS(fetch_shadow.paddr);
-                 break;
+                 goto instrument_memory_label;
             case QTRACE_MEMTRACE_FETCH_MSIZE:
-                 s->instrument_memory |= icontext->iargs[idx++];
-                 /* override with frontend specific offset */
                  icontext->iargs[idx] = OFS(fetch_shadow.bsize);
-                 break;
+                 goto instrument_memory_label;
             case QTRACE_MEMTRACE_FETCH_PREOP_VALUE:
-                 s->instrument_memory |= icontext->iargs[idx++];
-                 /* override with frontend specific offset */
                  icontext->iargs[idx] = OFS(fetch_shadow.prevalue);
-                 break;
+                 goto instrument_memory_label;
             case QTRACE_MEMTRACE_FETCH_PSTOP_VALUE:
-                 s->instrument_memory |= icontext->iargs[idx++];
-                 /* override with frontend specific offset */
                  icontext->iargs[idx] = OFS(fetch_shadow.pstvalue);
-                 break;
+                 goto instrument_memory_label;
             case QTRACE_MEMTRACE_STORE_VMA:
-                 s->instrument_memory |= icontext->iargs[idx++];
-                 /* override with frontend specific offset */
                  icontext->iargs[idx] = OFS(store_shadow.vaddr);
-                 break;
+                 goto instrument_memory_label;
             case QTRACE_MEMTRACE_STORE_PMA:
-                 s->instrument_memory |= icontext->iargs[idx++];
-                 /* override with frontend specific offset */
                  icontext->iargs[idx] = OFS(store_shadow.paddr);
-                 break;
+                 goto instrument_memory_label;
             case QTRACE_MEMTRACE_STORE_MSIZE:
-                 s->instrument_memory |= icontext->iargs[idx++];
-                 /* override with frontend specific offset */
                  icontext->iargs[idx] = OFS(store_shadow.bsize);
-                 break;
+                 goto instrument_memory_label;
             case QTRACE_MEMTRACE_STORE_PREOP_VALUE:
-                 s->instrument_memory |= icontext->iargs[idx++];
-                 /* override with frontend specific offset */
                  icontext->iargs[idx] = OFS(store_shadow.prevalue);
-                 break;
+                 goto instrument_memory_label;
             case QTRACE_MEMTRACE_STORE_PSTOP_VALUE:
-                 s->instrument_memory |= icontext->iargs[idx++];
-                 /* override with frontend specific offset */
                  icontext->iargs[idx] = OFS(store_shadow.pstvalue);
+instrument_memory_label:
+                 s->instrument_memory |= icontext->iargs[idx++];
                  break;
             default:
-                 ++idx;
+                 QTRACE_ERROR("unrecognized QTRACE IR node\n");
                  break;
             } 
         }
+
+        /* move onto the next instrumentation context */
         icontext = icontext->next;
     }
     return;
