@@ -82,17 +82,8 @@ static uint8_t gen_opc_cc_op[OPC_BUF_SIZE];
 /// ------------------------------------------------------------- ///
 ///             QTRACE GENERAL INSTRUMENT UTILS                   ///
 /// ------------------------------------------------------------- ///
-#define QTRACE_INSTRUMENT_VERIFIED(s)                                   \
-do                                                                      \
-{  /* this instrumentation is verified */                               \
-   s->qtrace_verified = true;                                           \
-} while(0);
-
-#define QTRACE_INSTRUMENT_UNVERIFIED(s)                                 \
-do                                                                      \
-{  /* this instrumentation is verified */                               \
-   s->qtrace_verified = false;                                          \
-} while(0);
+#define QTRACE_INSTRUMENT_VERIFIED(s)     { s->qtrace_verified = true; }
+#define QTRACE_INSTRUMENT_UNVERIFIED(s)   { s->qtrace_verified = false;}
 
 #define QTRACE_INSTRUMENT_CHECK_VERIFIED(s)                             \
 do                                                                      \
@@ -103,9 +94,11 @@ do                                                                      \
 #define QTRACE_INSTRUMENT_RESET_DISASCTX(s)                             \
 do                                                                      \
 {                                                                       \
-   QTRACE_RESET_INST_TYPE_FLAG(dc);                                     \
    s->instrument_memory = 0;                                            \
    s->module_call_count = 0;                                            \
+   QTRACE_RESET_INST_TYPE_FLAG(dc);                                     \
+   QTRACE_RESET_INST_RR_FLAG(dc);                                       \
+   QTRACE_RESET_INST_WR_FLAG(dc);                                       \
 }                                                                       \
 while(0);
 
@@ -114,7 +107,7 @@ while(0);
 #define QTRACE_CLIENT_MODULE(s)                                         \
 do                                                                      \
 {  /* call instruction instrumentation parsing routine */               \
-   qtrace_invoke_instruction_callback(s->qtrace_insnflags);             \
+   qtrace_invoke_instruction_callback(&s->qtrace_flags);                \
    s->qtrace_insncb = true;                                             \
    QTRACE_INSTRUMENT_UNVERIFIED(s);                                     \
    qtrace_interpret_instrument_requirements(s);                         \
@@ -134,18 +127,46 @@ do                                                                      \
 }                                                                       \
 while(0);
 
+/// ------------------------------------------------ ///
+/// QTRACE - X86 instruction TEST definitions.
+/// ------------------------------------------------ ///
+#define QTRACE_CONSTRUCT_INST_FLAG(F, y, z)  bool TEST_##F(uint64_t flag) { return F & flag; }  
+#include "qtrace-api-internal.h"
+#undef QTRACE_CONSTRUCT_INST_FLAG
+
+/// ------------------------------------------------ ///
+/// QTRACE - X86 instruction register lookup table. 
+/// ------------------------------------------------ ///
+const QTRACELogItem qtrace_x86_reg_items[] = {
+    { 1<<R_EAX     , "RAX" },
+    { 1<<R_EBX     , "RBX" },
+    { 1<<R_ECX     , "RCX" },
+    { 1<<R_EDX     , "RDX" },
+    { 1<<R_ESI     , "RSI" },
+    { 1<<R_EDI     , "RDI" },
+    { 1<<R_EBP     , "RBP" },
+    { 1<<R_ESP     , "RSP" },
+    { 1<<R_R8      , "R8"  },
+    { 1<<R_R9      , "R9"  },
+    { 1<<R_R10     , "R10" },
+    { 1<<R_R11     , "R11" },
+    { 1<<R_R12     , "R12" },
+    { 1<<R_R13     , "R13" },
+    { 1<<R_R14     , "R14" },
+    { 1<<R_R15     , "R15" }
+};
+
+const QTRACELogItem qtrace_x86_inst_items[] = {
+#define QTRACE_CONSTRUCT_INST_FLAG(x, y, z) {x, z},
+#include "qtrace-api-internal.h"
+#undef QTRACE_CONSTRUCT_INST_FLAG
+};
 
 #include "exec/gen-icount.h"
 
 #ifdef TARGET_X86_64
 static int x86_64_hregs;
 #endif
-
-typedef struct QTraceFlags {
-    unsigned ipoint;  /* insertion point */
-    unsigned flag;    /* the instrumentation flag */
-    struct QTraceFlags *next;
-} QTraceFlags;
 
 typedef struct DisasContext {
     /* current insn context */
@@ -190,15 +211,37 @@ typedef struct DisasContext {
     int cpuid_ext3_features;
     int cpuid_7_0_ebx_features;
 
-
     /* For QTRACE */
-    unsigned qtrace_insnflags;
+    QTraceFlags qtrace_flags;
     unsigned qtrace_insncb;
     unsigned qtrace_verified;
-    QTraceFlags *iflags;
     unsigned long long instrument_memory; /* all memory instrumentation by the client */
     unsigned module_call_count; 
 } DisasContext;
+
+
+static const char* lookup_x86_text(DisasContext *dc, char *disasm, unsigned flags, 
+                                   QTRACELogItem *logitems, unsigned logsize)
+{
+    int i;
+    for(i=0;i<=logsize;++i) {
+        if (flags & logitems[i].index) {
+            strcat(disasm,logitems[i].name);  strcat(disasm,","); 
+        }
+    }
+    strcat(disasm,"done"); 
+    return disasm;
+}
+
+static const char *lookup_x86_insn_text(DisasContext *dc, char *disasm, unsigned flags)
+{
+    return lookup_x86_text(dc, disasm, flags, qtrace_x86_inst_items, 54);
+}
+
+static const char* lookup_x86_gpr_text(DisasContext *dc, char *disasm, unsigned flags)
+{
+    return lookup_x86_text(dc, disasm, flags, qtrace_x86_reg_items, R_R15);
+}
 
 static void gen_eob(DisasContext *s);
 static void gen_jmp(DisasContext *s, target_ulong eip);
@@ -1886,6 +1929,25 @@ static void gen_helper_fp_arith_STN_ST0(int op, int opreg)
 }
 
 /* if d == OR_TMP0, it means memory operand (address in A0) */
+static void gen_op_used_regs(DisasContext *s1, int op, int ot, int d, uint16_t *rr, uint16_t *wr)
+{
+    if (d != OR_TMP0) *rr |= QTRACE_REG_SHIFT(d);
+    switch(op) {
+    case OP_ADCL:
+    case OP_SBBL:
+    case OP_ADDL:
+    case OP_SUBL:
+    case OP_ANDL:
+    case OP_ORL:
+    case OP_XORL:
+        if (d != OR_TMP0) *wr |= QTRACE_REG_SHIFT(d);
+        break;
+    default:
+        break;
+    }
+}
+
+/* if d == OR_TMP0, it means memory operand (address in A0) */
 static void gen_op(DisasContext *s1, int op, int ot, int d)
 {
     if (d != OR_TMP0) {
@@ -2498,6 +2560,186 @@ static void gen_shifti(DisasContext *s1, int op, int ot, int d, int c)
     }
 }
 
+static void gen_lea_modrm_used_regs(CPUX86State *env, DisasContext *s, int modrm,
+                                    int *reg_ptr, int *offset_ptr, uint16_t* rr, uint16_t* wr)
+{
+    target_long disp;
+    int havesib;
+    int base;
+    int index;
+    int scale;
+    int opreg;
+    int mod, rm, code, override, must_add_seg;
+    TCGv sum;
+
+    target_ulong orig_pc = s->pc;
+
+    override = s->override;
+    must_add_seg = s->addseg;
+    if (override >= 0)
+        must_add_seg = 1;
+    mod = (modrm >> 6) & 3;
+    rm = modrm & 7;
+
+    if (s->aflag) {
+        havesib = 0;
+        base = rm;
+        index = -1;
+        scale = 0;
+
+        if (base == 4) {
+            havesib = 1;
+            code = cpu_ldub_code(env, s->pc++);
+            scale = (code >> 6) & 3;
+            index = ((code >> 3) & 7) | REX_X(s);
+            if (index == 4) {
+                index = -1;  /* no index */
+            }
+            base = (code & 7);
+        }
+        base |= REX_B(s);
+
+        switch (mod) {
+        case 0:
+            if ((base & 7) == 5) {
+                base = -1;
+                disp = (int32_t)cpu_ldl_code(env, s->pc);
+                s->pc += 4;
+                if (CODE64(s) && !havesib) {
+                    disp += s->pc + s->rip_offset;
+                }
+            } else {
+                disp = 0;
+            }
+            break;
+        case 1:
+            disp = (int8_t)cpu_ldub_code(env, s->pc++);
+            break;
+        default:
+        case 2:
+            disp = (int32_t)cpu_ldl_code(env, s->pc);
+            s->pc += 4;
+            break;
+        }
+
+        /* For correct popl handling with esp.  */
+        if (base == R_ESP && s->popl_esp_hack) {
+            disp += s->popl_esp_hack;
+        }
+
+        /* Compute the address, with a minimum number of TCG ops.  */
+        if (index >= 0) {
+            if (scale == 0) {
+                *rr |= QTRACE_REG_SHIFT(index);
+            } else {
+                *rr |= QTRACE_REG_SHIFT(index);
+            }
+            if (base >= 0) {
+                *rr |= QTRACE_REG_SHIFT(base);
+            }
+        } else if (base >= 0) {
+            *rr |= QTRACE_REG_SHIFT(base);
+        }
+#if 0
+        if (must_add_seg) {
+            if (override < 0) {
+                if (base == R_EBP || base == R_ESP) {
+                    override = R_SS;
+                } else {
+                    override = R_DS;
+                }
+            }
+
+            tcg_gen_ld_tl(cpu_tmp0, cpu_env,
+                          offsetof(CPUX86State, segs[override].base));
+            if (CODE64(s)) {
+                if (s->aflag != 2) {
+                    tcg_gen_ext32u_tl(cpu_A0, cpu_A0);
+                }
+                tcg_gen_add_tl(cpu_A0, cpu_A0, cpu_tmp0);
+                goto done;
+            }
+
+            tcg_gen_add_tl(cpu_A0, cpu_A0, cpu_tmp0);
+        }
+#endif
+
+        if (s->aflag != 2) {
+            tcg_gen_ext32u_tl(cpu_A0, cpu_A0);
+        }
+    } else {
+        switch (mod) {
+        case 0:
+            if (rm == 6) {
+                disp = cpu_lduw_code(env, s->pc);
+                s->pc += 2;
+                rm = 0; /* avoid SS override */
+                goto no_rm;
+            } else {
+                disp = 0;
+            }
+            break;
+        case 1:
+            disp = (int8_t)cpu_ldub_code(env, s->pc++);
+            break;
+        default:
+        case 2:
+            disp = cpu_lduw_code(env, s->pc);
+            s->pc += 2;
+            break;
+        }
+        switch(rm) {
+        case 0:
+            *rr |= QTRACE_REG_SHIFT(R_EBX);
+            *rr |= QTRACE_REG_SHIFT(R_ESI);
+            break;
+        case 1:
+            *rr |= R_EBX;
+            *rr |= R_EDI;
+            break;
+        case 2:
+            *rr |= R_EBP;
+            *rr |= R_ESI;
+            break;
+        case 3:
+            *rr |= R_EBP;
+            *rr |= R_EDI;
+            break;
+        case 4:
+            *rr |= R_ESI;
+            break;
+        case 5:
+            *rr |= R_EDI;
+            break;
+        case 6:
+            *rr |= R_EBP;
+            break;
+        default:
+        case 7:
+            *rr |= R_EBX;
+            break;
+        }
+    no_rm:
+#if 1 
+        if (must_add_seg) {
+            if (override < 0) {
+                if (rm == 2 || rm == 3 || rm == 6)
+                    override = R_SS;
+                else
+                    override = R_DS;
+            }
+        }
+#endif
+    }
+    s->pc = orig_pc;
+}
+
+/* The ModR/M byte encodes a register or an opcode extension, and a register or a memory address. It has the following fields
+     7                           0
++---+---+---+---+---+---+---+---+
+|  mod  |    reg    |     rm    |
++---+---+---+---+---+---+---+---+
+*/
 static void gen_lea_modrm(CPUX86State *env, DisasContext *s, int modrm,
                           int *reg_ptr, int *offset_ptr)
 {
@@ -2760,6 +3002,42 @@ static void gen_add_A0_ds_seg(DisasContext *s)
 /* generate modrm memory load or store of 'reg'. TMP0 is used if reg ==
    OR_TMP0 */
 static inline bool test_ldst_mem(int modrm) { return ((modrm >> 6) & 3) != 3; }
+
+/* similar to gen_ldst_modrm, but only come up with a list of read/write registers
+   without generating the emulation instructions */
+static void gen_ldst_modrm_used_regs(CPUX86State *env, DisasContext *s, int modrm,
+                                     int ot, int reg, int is_store, uint16_t *rr, 
+                                     uint16_t *wr)
+{
+    int mod, rm, opreg, disp;
+
+    mod = (modrm >> 6) & 3;
+    rm = (modrm & 7) | REX_B(s);
+    if (mod == 3) {
+        if (is_store) {
+            if (reg != OR_TMP0)
+                *rr |= QTRACE_REG_SHIFT(reg);
+            *wr |= (1<<rm);
+        } else {
+            *rr |= (1<<rm);
+            if (reg != OR_TMP0)
+                *wr |= QTRACE_REG_SHIFT(reg);
+        }
+    } else {
+        gen_lea_modrm_used_regs(env, s, modrm, &opreg, &disp, rr, wr);
+        if (is_store) {
+            if (reg != OR_TMP0)
+                *rr |= QTRACE_REG_SHIFT(reg);
+            gen_op_st_T0_A0(s, ot + s->mem_index);
+        } else {
+            gen_op_ld_T0_A0(s, ot + s->mem_index);
+            if (reg != OR_TMP0)
+                *wr |= QTRACE_REG_SHIFT(reg);
+        }
+    }
+}
+
+
 static void gen_ldst_modrm(CPUX86State *env, DisasContext *s, int modrm,
                            int ot, int reg, int is_store)
 {
@@ -5087,6 +5365,7 @@ static void gen_sse(CPUX86State *env, DisasContext *s, int b,
 static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                                target_ulong pc_start)
 {
+    uint16_t rr = 0, wr = 0;
     int b, prefixes, aflag, dflag;
     int shift, ot;
     int modrm, reg, rm, mod, reg_addr, op, opreg, offset_addr, val;
@@ -5291,17 +5570,27 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                     QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_FETCH);
                     /* cmp Ev, Gv does not do a store ! */
                     QTRACE_ADD_COND_INST_TYPE_FLAG(s, QTRACE_IS_X86_STORE, op != OP_CMPL);
+                    gen_lea_modrm_used_regs(env, s, modrm, &reg_addr, &offset_addr, &rr, &wr);
+                    QTRACE_ADD_INST_RR_FLAG_NOSHIFT(s, rr);
+                    QTRACE_ADD_INST_RR_FLAG(s, reg);
+                    QTRACE_ADD_INST_WR_FLAG_NOSHIFT(s, wr);
                     gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
                     opreg = OR_TMP0;
                 } else if (op == OP_XORL && rm == reg) {
                 xor_zero:
                     /* xor reg, reg optimisation */
+                    QTRACE_ADD_INST_RR_FLAG(s, reg);
+                    QTRACE_ADD_INST_WR_FLAG(s, reg);
                     QTRACE_CLIENT_MODULE(s);
                     set_cc_op(s, CC_OP_CLR);
                     gen_op_movl_T0_0();
                     gen_op_mov_reg_T0(ot, reg);
                     break;
                 } else {
+                    gen_op_used_regs(s, op, ot, rm, &rr, &wr);
+                    QTRACE_ADD_INST_RR_FLAG_NOSHIFT(s, rr);
+                    QTRACE_ADD_INST_WR_FLAG_NOSHIFT(s, wr);
+                    QTRACE_ADD_INST_RR_FLAG(s, reg);
                     QTRACE_CLIENT_MODULE(s);
                     opreg = rm;
                 }
@@ -5315,18 +5604,26 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                 rm = (modrm & 7) | REX_B(s);
                 if (mod != 3) {
                     QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_FETCH);
+                    gen_lea_modrm_used_regs(env, s, modrm, &reg_addr, &offset_addr, &rr, &wr);
+                    gen_op_used_regs(s, op, ot, reg, &rr, &wr);
+                    QTRACE_ADD_INST_RR_FLAG_NOSHIFT(s, rr);
+                    QTRACE_ADD_INST_WR_FLAG_NOSHIFT(s, wr);
                     QTRACE_CLIENT_MODULE(s);
                     gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
                     gen_op_ld_T1_A0(s, ot + s->mem_index);
                 } else if (op == OP_XORL && rm == reg) {
                     goto xor_zero;
                 } else {
+                    QTRACE_ADD_INST_RR_FLAG(s, rm);
+                    QTRACE_ADD_INST_WR_FLAG(s, reg);
                     QTRACE_CLIENT_MODULE(s);
                     gen_op_mov_TN_reg(ot, 1, rm);
                 }
                 gen_op(s, op, ot, reg);
                 break;
             case 2: /* OP A, Iv */
+                QTRACE_ADD_INST_RR_FLAG(s, OR_EAX);
+                QTRACE_ADD_COND_INST_WR_FLAG(s, OR_EAX, (op!=OP_CMPL));
                 QTRACE_CLIENT_MODULE(s);
                 val = insn_get(env, s, ot);
                 gen_op_movl_T1_im(val);
@@ -5335,8 +5632,6 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             }
         }
         break;
-
-
     case 0x82:
         if (CODE64(s))
             goto illegal_op;
@@ -5390,22 +5685,24 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         }
         break;
 
-
         /**************************/
         /* inc, dec, and other misc arith */
     case 0x40 ... 0x47: /* inc Gv */
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_ARITHLOGIC);
+        QTRACE_ADD_INST_RR_FLAG(s, OR_EAX + (b & 7));
+        QTRACE_ADD_INST_WR_FLAG(s, OR_EAX + (b & 7));
         QTRACE_CLIENT_MODULE(s);
         ot = dflag ? OT_LONG : OT_WORD;
         gen_inc(s, ot, OR_EAX + (b & 7), 1);
         break;
     case 0x48 ... 0x4f: /* dec Gv */
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_ARITHLOGIC);
+        QTRACE_ADD_INST_RR_FLAG(s, OR_EAX + (b & 7));
+        QTRACE_ADD_INST_WR_FLAG(s, OR_EAX + (b & 7));
         QTRACE_CLIENT_MODULE(s);
         ot = dflag ? OT_LONG : OT_WORD;
         gen_inc(s, ot, OR_EAX + (b & 7), -1);
         break;
-
     case 0xf6: /* GRP3 */
     case 0xf7:
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_ARITHLOGIC);
@@ -5421,12 +5718,16 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         if (mod != 3) {
             QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_FETCH);
             QTRACE_ADD_COND_INST_TYPE_FLAG(s, QTRACE_IS_X86_STORE, (op >=1 && op<=3));
+            gen_lea_modrm_used_regs(env, s, modrm, &reg_addr, &offset_addr, &rr, &wr);
+            QTRACE_ADD_INST_RR_FLAG_NOSHIFT(s, rr);
             QTRACE_CLIENT_MODULE(s);
             if (op == 0)
                 s->rip_offset = insn_const_size(ot);
             gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
             gen_op_ld_T0_A0(s, ot + s->mem_index);
         } else {
+            QTRACE_ADD_INST_RR_FLAG(s, rm);
+            QTRACE_ADD_COND_INST_RR_FLAG(s, rm, (op == 2 || op == 3));
             QTRACE_CLIENT_MODULE(s);
             gen_op_mov_TN_reg(ot, 0, rm);
         }
@@ -5646,11 +5947,14 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             /* push does not fetch from memory */
             QTRACE_ADD_COND_INST_TYPE_FLAG(s, QTRACE_IS_X86_FETCH, (op != 6));
             QTRACE_ADD_COND_INST_TYPE_FLAG(s, QTRACE_IS_X86_STORE, (op == 0 || op == 1));
+            QTRACE_ADD_INST_RR_ADDR_FLAG(s);
             QTRACE_CLIENT_MODULE(s);
             gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
             if (op >= 2 && op != 3 && op != 5)
                 gen_op_ld_T0_A0(s, ot + s->mem_index);
         } else {
+            QTRACE_ADD_INST_RR_FLAG(s, rm);
+            QTRACE_ADD_COND_INST_WR_FLAG(s, rm, (op == 0 || op == 1));
             QTRACE_CLIENT_MODULE(s);
             gen_op_mov_TN_reg(ot, 0, rm);
         }
@@ -5732,15 +6036,8 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             goto illegal_op;
         }
         break;
-        /// ---------------------------------- ///
-        /// QTRACE - PARSED                    ///
-        /// ---------------------------------- ///
-
     case 0x84: /* test Ev, Gv */
     case 0x85:
-        QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_ARITHLOGIC);
-        QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_FETCH);
-        QTRACE_CLIENT_MODULE(s);
         if ((b & 1) == 0)
             ot = OT_BYTE;
         else
@@ -5748,6 +6045,13 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
 
         modrm = cpu_ldub_code(env, s->pc++);
         reg = ((modrm >> 3) & 7) | rex_r;
+
+        QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_ARITHLOGIC);
+        QTRACE_ADD_COND_INST_TYPE_FLAG(s, QTRACE_IS_X86_FETCH, test_ldst_mem(modrm));
+        gen_ldst_modrm_used_regs(env, s, modrm, ot, OR_TMP0, 0, &rr, &wr);
+        QTRACE_ADD_INST_RR_FLAG_NOSHIFT(s, rr);
+        QTRACE_ADD_INST_WR_FLAG_NOSHIFT(s, wr);
+        QTRACE_CLIENT_MODULE(s);
 
         gen_ldst_modrm(env, s, modrm, ot, OR_TMP0, 0);
         gen_op_mov_TN_reg(ot, 1, reg);
@@ -5758,6 +6062,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     case 0xa8: /* test eAX, Iv */
     case 0xa9:
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_ARITHLOGIC);
+        QTRACE_ADD_INST_RR_FLAG(s, OR_EAX);
         QTRACE_CLIENT_MODULE(s);
         if ((b & 1) == 0)
             ot = OT_BYTE;
@@ -5822,6 +6127,11 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
 
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_ARITHLOGIC);
         QTRACE_ADD_COND_INST_TYPE_FLAG(s, QTRACE_IS_X86_FETCH, test_ldst_mem(modrm));
+        gen_ldst_modrm_used_regs(env, s, modrm, ot, OR_TMP0, 0, &rr, &wr);
+        QTRACE_ADD_INST_RR_FLAG_NOSHIFT(s, rr);
+        QTRACE_ADD_INST_WR_FLAG_NOSHIFT(s, wr);
+        QTRACE_ADD_COND_INST_RR_FLAG(s, reg, (b == 0x1af));
+        QTRACE_ADD_INST_WR_FLAG(s, reg);
         QTRACE_CLIENT_MODULE(s);
 
         if (b == 0x69)
@@ -6007,6 +6317,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     case 0x50 ... 0x57: /* push */
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_PUSH);
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_STORE);
+        QTRACE_ADD_INST_RR_FLAG(s, (b & 7) | REX_B(s));
         QTRACE_CLIENT_MODULE(s);
 
         gen_op_mov_TN_reg(OT_LONG, 0, (b & 7) | REX_B(s));
@@ -6015,6 +6326,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     case 0x58 ... 0x5f: /* pop */
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_POP);
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_FETCH);
+        QTRACE_ADD_INST_WR_FLAG(s, (b & 7) | REX_B(s));
         QTRACE_CLIENT_MODULE(s);
 
         if (CODE64(s)) {
@@ -6033,7 +6345,16 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
 
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_PUSH);
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_STORE);
+        QTRACE_ADD_INST_RR_FLAG(s, R_EAX);
+        QTRACE_ADD_INST_RR_FLAG(s, R_EBX);
+        QTRACE_ADD_INST_RR_FLAG(s, R_ECX);
+        QTRACE_ADD_INST_RR_FLAG(s, R_EDX);
+        QTRACE_ADD_INST_RR_FLAG(s, R_ESI);
+        QTRACE_ADD_INST_RR_FLAG(s, R_EDI);
+        QTRACE_ADD_INST_RR_FLAG(s, R_EBP);
+        QTRACE_ADD_INST_RR_FLAG(s, R_ESP);
         QTRACE_CLIENT_MODULE(s);
+
         gen_pusha(s);
         break;
     case 0x61: /* popa */
@@ -6042,7 +6363,16 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
 
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_POP);
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_FETCH);
+        QTRACE_ADD_INST_WR_FLAG(s, R_EAX);
+        QTRACE_ADD_INST_WR_FLAG(s, R_EBX);
+        QTRACE_ADD_INST_WR_FLAG(s, R_ECX);
+        QTRACE_ADD_INST_WR_FLAG(s, R_EDX);
+        QTRACE_ADD_INST_WR_FLAG(s, R_ESI);
+        QTRACE_ADD_INST_WR_FLAG(s, R_EDI);
+        QTRACE_ADD_INST_WR_FLAG(s, R_EBP);
+        QTRACE_ADD_INST_WR_FLAG(s, R_ESP);
         QTRACE_CLIENT_MODULE(s);
+
         gen_popa(s);
         break;
     case 0x68: /* push Iv */
@@ -6083,7 +6413,6 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             rm = (modrm & 7) | REX_B(s);
             gen_op_mov_reg_T0(ot, rm);
         } else {
-
             /* NOTE: order is important too for MMU exceptions */
             s->popl_esp_hack = 1 << ot;
             gen_ldst_modrm(env, s, modrm, ot, OR_TMP0, 1);
@@ -6198,6 +6527,9 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         reg = ((modrm >> 3) & 7) | rex_r;
 
         QTRACE_ADD_COND_INST_TYPE_FLAG(s, QTRACE_IS_X86_STORE, test_ldst_mem(modrm));
+        gen_ldst_modrm_used_regs(env, s, modrm, ot, reg, 1, &rr, &wr);
+        QTRACE_ADD_INST_RR_FLAG_NOSHIFT(s, rr);
+        QTRACE_ADD_INST_WR_FLAG_NOSHIFT(s, wr);
         QTRACE_CLIENT_MODULE(s);
 
         /* generate a generic store */
@@ -6216,6 +6548,13 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         mod = (modrm >> 6) & 3;
 
         QTRACE_ADD_COND_INST_TYPE_FLAG(s, QTRACE_IS_X86_STORE, test_ldst_mem(modrm));
+        if (mod != 3) {
+            gen_lea_modrm_used_regs(env, s, modrm, &reg_addr, &offset_addr, &rr, &wr);
+            QTRACE_ADD_INST_RR_FLAG_NOSHIFT(s, rr);
+        } 
+        else {
+            QTRACE_ADD_INST_WR_FLAG(s, (modrm & 7) | REX_B(s));
+        } 
         QTRACE_CLIENT_MODULE(s);
 
         if (mod != 3) {
@@ -6228,8 +6567,9 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         if (mod != 3) {
             gen_op_st_T0_A0(s, ot + s->mem_index);
         }
-        else
+        else {
             gen_op_mov_reg_T0(ot, (modrm & 7) | REX_B(s));
+        }
         break;
     case 0x8a:
     case 0x8b: /* mov Ev, Gv */
@@ -6237,7 +6577,6 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         /* Move r/m16 to r16. */
         /* Move r/m32 to r32. */
         /* Move r/m64 to r64. */
-        /* IMPLEMENTING */
         if ((b & 1) == 0)
             ot = OT_BYTE;
         else
@@ -6246,6 +6585,9 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         reg = ((modrm >> 3) & 7) | rex_r;
 
         QTRACE_ADD_COND_INST_TYPE_FLAG(s, QTRACE_IS_X86_FETCH, test_ldst_mem(modrm));
+        gen_ldst_modrm_used_regs(env, s, modrm, ot, OR_TMP0, 0, &rr, &wr);
+        QTRACE_ADD_INST_RR_FLAG_NOSHIFT(s, rr);
+        QTRACE_ADD_INST_WR_FLAG(s, reg);
         QTRACE_CLIENT_MODULE(s);
 
         gen_ldst_modrm(env, s, modrm, ot, OR_TMP0, 0);
@@ -6261,6 +6603,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             goto illegal_op;
 
         QTRACE_ADD_COND_INST_TYPE_FLAG(s, QTRACE_IS_X86_FETCH, test_ldst_mem(modrm));
+        QTRACE_ADD_INST_RR_ADDR_FLAG(s);
         QTRACE_CLIENT_MODULE(s);
 
         gen_ldst_modrm(env, s, modrm, OT_WORD, OR_TMP0, 0);
@@ -6313,6 +6656,14 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             rm = (modrm & 7) | REX_B(s);
 
             QTRACE_ADD_COND_INST_TYPE_FLAG(s, QTRACE_IS_X86_FETCH, test_ldst_mem(modrm));
+            if (mod == 3) {
+                QTRACE_ADD_INST_RR_FLAG(s, rm);
+            }
+            else {
+                gen_lea_modrm_used_regs(env, s, modrm, &reg_addr, &offset_addr, &rr, &wr);
+                QTRACE_ADD_INST_RR_FLAG_NOSHIFT(s, rr);
+            }
+            QTRACE_ADD_INST_WR_FLAG(s, reg);
             QTRACE_CLIENT_MODULE(s);
 
             if (mod == 3) {
@@ -6354,6 +6705,9 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         reg = ((modrm >> 3) & 7) | rex_r;
 
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_ARITHLOGIC);
+        gen_lea_modrm_used_regs(env, s, modrm, &reg_addr, &offset_addr, &rr, &wr);
+        QTRACE_ADD_INST_RR_FLAG_NOSHIFT(s, rr);
+        QTRACE_ADD_INST_WR_FLAG(s, reg);
         QTRACE_CLIENT_MODULE(s);
 
         /* we must ensure that no segment is added */
@@ -6384,6 +6738,8 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
 
             QTRACE_ADD_COND_INST_TYPE_FLAG(s, QTRACE_IS_X86_STORE,  (b&2));
             QTRACE_ADD_COND_INST_TYPE_FLAG(s, QTRACE_IS_X86_FETCH, !(b&2));
+            QTRACE_ADD_COND_INST_RR_FLAG(s, R_EAX, (b&2));
+            QTRACE_ADD_COND_INST_WR_FLAG(s, R_EAX, !(b&2));
             QTRACE_CLIENT_MODULE(s);
 
             if ((b & 1) == 0)
@@ -6445,6 +6801,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         break;
     case 0xb0 ... 0xb7: /* mov R, Ib */
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_MOV);
+        QTRACE_ADD_INST_WR_FLAG(s,  (b & 7) | REX_B(s));
         QTRACE_CLIENT_MODULE(s);
         val = insn_get(env, s, OT_BYTE);
         gen_op_movl_T0_im(val);
@@ -6452,6 +6809,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         break;
     case 0xb8 ... 0xbf: /* mov R, Iv */
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_MOV);
+        QTRACE_ADD_INST_WR_FLAG(s,  (b & 7) | REX_B(s));
         QTRACE_CLIENT_MODULE(s);
 
 #ifdef TARGET_X86_64
@@ -6480,6 +6838,10 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         ot = dflag + OT_WORD;
         reg = (b & 7) | REX_B(s);
         rm = R_EAX;
+        QTRACE_ADD_INST_RR_FLAG(s, reg);
+        QTRACE_ADD_INST_WR_FLAG(s, reg);
+        QTRACE_ADD_INST_RR_FLAG(s, rm);
+        QTRACE_ADD_INST_WR_FLAG(s, rm);
         goto do_xchg_reg;
     case 0x86:
     case 0x87: /* xchg Ev, Gv */
@@ -6493,6 +6855,10 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         mod = (modrm >> 6) & 3;
         if (mod == 3) {
             rm = (modrm & 7) | REX_B(s);
+            QTRACE_ADD_INST_RR_FLAG(s, reg);
+            QTRACE_ADD_INST_WR_FLAG(s, reg);
+            QTRACE_ADD_INST_RR_FLAG(s, rm);
+            QTRACE_ADD_INST_WR_FLAG(s, rm);
         do_xchg_reg:
             QTRACE_CLIENT_MODULE(s);
             gen_op_mov_TN_reg(ot, 0, reg);
@@ -6502,6 +6868,8 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         } else {
             QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_FETCH);
             QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_STORE);
+            QTRACE_ADD_INST_RR_FLAG(s, reg);
+            QTRACE_ADD_INST_WR_FLAG(s, reg);
             QTRACE_CLIENT_MODULE(s);
 
             gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
@@ -7337,6 +7705,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     case 0xe5:
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_FETCH);
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_IO);
+        QTRACE_ADD_INST_WR_FLAG(s, R_EAX);
         QTRACE_CLIENT_MODULE(s);
 
         if ((b & 1) == 0)
@@ -7361,6 +7730,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     case 0xe7:
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_STORE);
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_IO);
+        QTRACE_ADD_INST_RR_FLAG(s, R_EAX);
         QTRACE_CLIENT_MODULE(s);
 
         if ((b & 1) == 0)
@@ -7387,6 +7757,8 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     case 0xed:
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_STORE);
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_IO);
+        QTRACE_ADD_INST_RR_FLAG(s, R_EDX);
+        QTRACE_ADD_INST_WR_FLAG(s, R_EAX);
         QTRACE_CLIENT_MODULE(s);
 
         if ((b & 1) == 0)
@@ -7411,6 +7783,8 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     case 0xef:
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_STORE);
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_IO);
+        QTRACE_ADD_INST_RR_FLAG(s, R_EAX);
+        QTRACE_ADD_INST_RR_FLAG(s, R_EDX);
         QTRACE_CLIENT_MODULE(s);
 
         if ((b & 1) == 0)
@@ -7792,13 +8166,16 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         QTRACE_ADD_INST_TYPE_FLAG(s, QTRACE_IS_X86_ARITHLOGIC);
         QTRACE_ADD_COND_INST_TYPE_FLAG(s, QTRACE_IS_X86_FETCH, test_ldst_mem(modrm));
         QTRACE_ADD_COND_INST_TYPE_FLAG(s, QTRACE_IS_X86_STORE, test_ldst_mem(modrm));
-        QTRACE_CLIENT_MODULE(s);
 
         if (mod != 3) {
+            QTRACE_CLIENT_MODULE(s);
             s->rip_offset = 1;
             gen_lea_modrm(env, s, modrm, &reg_addr, &offset_addr);
             gen_op_ld_T0_A0(s, ot + s->mem_index);
         } else {
+            QTRACE_ADD_INST_RR_FLAG(s, rm);
+            QTRACE_ADD_INST_WR_FLAG(s, rm);
+            QTRACE_CLIENT_MODULE(s);
             gen_op_mov_TN_reg(ot, 0, rm);
         }
         /* load shift */
@@ -7809,6 +8186,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         op -= 4;
         goto bt_op;
     case 0x1a3: /* bt Gv, Ev */
+        QTRACE_ADD_INST_RR_FLAG(s, rm);
         op = 0;
         goto do_btx;
     case 0x1ab: /* bts */
@@ -9273,6 +9651,11 @@ static inline void gen_intermediate_code_internal(X86CPU *cpu,
 
         QTRACE_INSTRUMENT_VERIFIED(dc);
 
+        if (pc_start == 0x0000000007fe0f1c)
+        {
+            printf("abc\n");
+        }
+
         pc_ptr = disas_insn(env, dc, pc_ptr);
 
         /* QTRACE - generate the instrumentation */
@@ -9339,6 +9722,16 @@ static inline void gen_intermediate_code_internal(X86CPU *cpu,
     }
 #endif
 
+    if (qemu_loglevel_mask(QTRACE_LOG_FLAGS)) {
+        qemu_log("----------------\n");
+        qemu_log("QTRACE FLAGS:\n");
+        qemu_log("{\n");
+        qemu_log("  qtrace_insnflags ==> %s\n", lookup_x86_insn_text(dc, dc->qtrace_flags.qtrace_insnflags_str, dc->qtrace_flags.qtrace_insnflags));
+        qemu_log("  qtrace_insnrr ==> %s\n", lookup_x86_gpr_text(dc, dc->qtrace_flags.qtrace_fetch_gpr_str, dc->qtrace_flags.qtrace_insnrr));
+        qemu_log("  qtrace_insnwr ==> %s\n", lookup_x86_gpr_text(dc, dc->qtrace_flags.qtrace_write_gpr_str, dc->qtrace_flags.qtrace_insnwr));
+        qemu_log("}\n");
+    } 
+
     if (!search_pc) {
         tb->size = pc_ptr - pc_start;
         tb->icount = num_insns;
@@ -9378,6 +9771,7 @@ void restore_state_to_opc(CPUX86State *env, TranslationBlock *tb, int pc_pos)
     if (cc_op != CC_OP_DYNAMIC)
         env->cc_op = cc_op;
 }
+
 
 #if 0
                  /* synchronize the pc if instrumenting it */

@@ -27,9 +27,40 @@
 /// ------------------------------------------------ ///
 /// instrumentation IDs and flags. 
 /// ------------------------------------------------ ///
-#define QTRACE_RESET_INST_TYPE_FLAG(s)              (s->qtrace_insnflags=0)
-#define QTRACE_ADD_INST_TYPE_FLAG(s,flg)            (s->qtrace_insnflags|=(flg))
-#define QTRACE_ADD_COND_INST_TYPE_FLAG(s,flg,c)     {if(c) QTRACE_ADD_INST_TYPE_FLAG(s, flg);}
+#define QTRACE_REG_SHIFT(reg)                         (1<<reg)
+#define QTRACE_ADD_INST_TYPE_FLAG(s,flg)              {s->qtrace_flags.qtrace_insnflags|=(flg);}
+#define QTRACE_ADD_COND_INST_TYPE_FLAG(s,flg,c)       {if(c) QTRACE_ADD_INST_TYPE_FLAG(s, flg);}
+#define QTRACE_ADD_INST_RR_FLAG(s,reg)                {s->qtrace_flags.qtrace_insnrr|=(1<<(reg));}
+#define QTRACE_ADD_INST_RR_FLAG_NOSHIFT(s,reg)        {s->qtrace_flags.qtrace_insnrr|=reg;}
+#define QTRACE_ADD_COND_INST_RR_FLAG(s,reg,c)         {if(c) QTRACE_ADD_INST_RR_FLAG(s, reg);}
+#define QTRACE_ADD_COND_INST_RR_FLAG_NOSHIFT(s,reg,c) {if(c) QTRACE_ADD_INST_RR_FLAG_NOSHIFT(s, reg);} 
+#define QTRACE_ADD_INST_WR_FLAG(s,reg)                {s->qtrace_flags.qtrace_insnwr|=(1<<(reg));}
+#define QTRACE_ADD_INST_WR_FLAG_NOSHIFT(s,reg)        {s->qtrace_flags.qtrace_insnwr|=reg;}
+#define QTRACE_ADD_COND_INST_WR_FLAG(s,reg,c)         {if(c) QTRACE_ADD_INST_WR_FLAG(s, reg);}
+#define QTRACE_ADD_COND_INST_WR_FLAG_NOSHIFT(s,reg,c) {if(c) QTRACE_ADD_INST_WR_FLAG_NOSHIFT(s, reg);} 
+#define QTRACE_ADD_INST_RR_ALL_FLAG(s)                {s->qtrace_flags.qtrace_insnrr|= ~0;  }
+#define QTRACE_ADD_INST_WR_ALL_FLAG(s)                {s->qtrace_flags.qtrace_insnwr|= ~0;  }
+
+#define QTRACE_ADD_INST_RR_ADDR_FLAG(s)                     \
+do {                                                        \
+    QTRACE_ADD_INST_RR_ALL_FLAG(s);                         \
+} while(0);
+
+#define QTRACE_RESET_INST_TYPE_FLAG(s)                      \
+do {                                                        \
+    s->qtrace_flags.qtrace_insnflags=0;                     \
+    memset(s->qtrace_flags.qtrace_insnflags_str, 0, sizeof(s->qtrace_flags.qtrace_insnflags_str)); \
+} while(0);
+#define QTRACE_RESET_INST_RR_FLAG(s)                        \
+do {                                                        \
+    s->qtrace_flags.qtrace_insnrr=0;                        \
+    memset(s->qtrace_flags.qtrace_fetch_gpr_str, 0, sizeof(s->qtrace_flags.qtrace_fetch_gpr_str));  \
+} while(0);
+#define QTRACE_RESET_INST_WR_FLAG(s)                        \
+do {                                                        \
+    s->qtrace_flags.qtrace_insnwr=0;                        \
+    memset(s->qtrace_flags.qtrace_write_gpr_str, 0, sizeof(s->qtrace_flags.qtrace_write_gpr_str)); \
+} while(0);
 
 /// ------------------------------------------------ ///
 /// reserve instrumentation space . 
@@ -226,9 +257,9 @@ void (*QTRACE_WALK_PAGETABLE)(int, bool, PageWalkContext*);
 /// ------------------------------------------------ ///
 void qtrace_instrument_setup(const char*);
 /// qtrace_invoke_instruction_callback - invoke all the instruction level callbacks.
-void qtrace_invoke_instruction_callback(unsigned arg);
+void qtrace_invoke_instruction_callback(QTraceFlags *);
 /// qtrace_invoke_ibasicblock_callback - invoke all the basic-block level callbacks.
-void qtrace_invoke_ibasicblock_callback(unsigned arg);
+void qtrace_invoke_ibasicblock_callback(QTraceFlags*);
 /// invoke plugin-defined functions.
 void qtrace_invoke_client_from_list(const char *mn, const char* fn, GenericRtnContainer *list);
 /// qtrace_instrument_parser - called by every instruction to parse the 

@@ -21,7 +21,7 @@ static void UserCount(void)
 
 void InstructionCallBack(unsigned type)
 {
-    if (QTRACE_TEST_KERN(type))
+    if (TEST_QTRACE_IS_X86_KERN(type))
     {
           QTRACE_INSTRUCTION_INSTRUMENT(QTRACE_BEGIN_ARG, 
                                         QTRACE_IPOINT_BEFORE, 
@@ -29,7 +29,7 @@ void InstructionCallBack(unsigned type)
                                         QTRACE_END_ARG); 
     }
 
-    if (QTRACE_TEST_USER(type))
+    if (TEST_QTRACE_IS_X86_USER(type))
     {
           QTRACE_INSTRUCTION_INSTRUMENT(QTRACE_BEGIN_ARG, 
                                         QTRACE_IPOINT_BEFORE, 

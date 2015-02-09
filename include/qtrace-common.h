@@ -34,6 +34,7 @@
 #define QTRACE_LOCAL_FUN        static
 #define QTRACE_MAX_IARGS        256 
 #define QTRACE_MAX_CALLBACK_NUM 256
+#define QTRACE_DISASM_STR_LEN   256
 
 #define ResetStatsNameString  "ResetStats"
 #define PrintStatsNameString  "PrintStats"
@@ -155,5 +156,20 @@ extern GenericRtnContainer* printstats_list;
 extern GenericRtnContainer* userdefine_list;
 extern GenericRtnContainer* instruction_list;
 extern GenericRtnContainer* ibasicblock_list;
+
+typedef struct QTRACELogItem {
+    uint64_t index;
+    const char *name;
+} QTRACELogItem;
+
+typedef struct  {
+    uint64_t qtrace_insnflags;
+    uint16_t qtrace_insnrr;     /* read registers */
+    uint16_t qtrace_insnwr;     /* write registers */
+    char     qtrace_insnflags_str[QTRACE_DISASM_STR_LEN];
+    char     qtrace_fetch_gpr_str[QTRACE_DISASM_STR_LEN];
+    char     qtrace_write_gpr_str[QTRACE_DISASM_STR_LEN];
+} QTraceFlags;
+
 
 #endif // QTRACE_COMMON_H

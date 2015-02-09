@@ -54,7 +54,7 @@ unsigned long long last_uiid = 0;
 /// @ of all instruction callbacks and call them one by one. the callbacks then
 /// @ tells QTRACE what to instrument. 
 #define qtrace_invoke_callback(unit, ulist)             \
-void qtrace_invoke_##unit##_callback(unsigned arg)      \
+void qtrace_invoke_##unit##_callback(QTraceFlags *arg)  \
 {                                                       \
     GenericRtnContainer* b = ulist;                     \
     while(b)                                            \
@@ -114,13 +114,13 @@ static void add_function_to_list(void *rtn,
    GenericRtnContainer *head = *list;
    if (!*list) 
    {
-      head = *list = (GenericRtnContainer*) malloc(sizeof(GenericRtnContainer));
+      head = *list = (GenericRtnContainer*) g_malloc0(sizeof(GenericRtnContainer));
    }
    else 
    {
       /* get to the end of the linkedlist */
       while(head->next) head = head->next;
-      head->next = (GenericRtnContainer*) malloc(sizeof(GenericRtnContainer));
+      head->next = (GenericRtnContainer*) g_malloc0(sizeof(GenericRtnContainer));
       head = head->next;
    }
 
@@ -158,7 +158,7 @@ InstrumentContext* qtrace_get_current_icontext_list(void)
 /// @ pointed by root.
 void qtrace_allocate_new_icontext(InstrumentContext **root)
 {   
-    InstrumentContext* newhead = malloc(sizeof(InstrumentContext));
+    InstrumentContext* newhead = g_malloc0(sizeof(InstrumentContext));
     memset(newhead, 0x0, sizeof(InstrumentContext));
     newhead->next = *root;
     *root = newhead;
@@ -171,7 +171,7 @@ void qtrace_free_icontext_root(InstrumentContext *root)
    InstrumentContext *next = NULL;
    while(root) 
    {
-      next = root->next;  root->next = NULL; free(root);
+      next = root->next;  root->next = NULL; g_free(root);
       root = next;
    }
    return;
@@ -509,5 +509,6 @@ void qtrace_instrument_setup(const char *module)
     /* done */
     return;
 }
+
 
 

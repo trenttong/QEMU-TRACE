@@ -117,6 +117,8 @@ const QEMULogItem qemu_log_items[] = {
     { LOG_GUEST_ERROR, "guest_errors",
       "log when the guest OS does something invalid (eg accessing a\n"
       "non-existent register)" },
+    { QTRACE_LOG_FLAGS, "qtrace_flags",
+      "show qtrace target assembly code flags" },
     { 0, NULL, NULL },
 };
 

@@ -12,7 +12,7 @@ static void MemFetchTrace(void *vma, unsigned msize)
 
 void InstructionCallBack(unsigned type)
 {
-    if (QTRACE_TEST_FETCH(type))
+    if (QTRACE_TEST_X86_FETCH(type))
     {
           QTRACE_INSTRUCTION_INSTRUMENT(QTRACE_BEGIN_ARG, 
                                         QTRACE_IPOINT_AFTER, 
