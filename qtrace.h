@@ -257,9 +257,9 @@ void (*QTRACE_WALK_PAGETABLE)(int, bool, PageWalkContext*);
 /// ------------------------------------------------ ///
 void qtrace_instrument_setup(const char*);
 /// qtrace_invoke_instruction_callback - invoke all the instruction level callbacks.
-void qtrace_invoke_instruction_callback(QTraceFlags *);
+void qtrace_invoke_instruction_callback(uint64_t);
 /// qtrace_invoke_ibasicblock_callback - invoke all the basic-block level callbacks.
-void qtrace_invoke_ibasicblock_callback(QTraceFlags*);
+void qtrace_invoke_ibasicblock_callback(uint64_t);
 /// invoke plugin-defined functions.
 void qtrace_invoke_client_from_list(const char *mn, const char* fn, GenericRtnContainer *list);
 /// qtrace_instrument_parser - called by every instruction to parse the 

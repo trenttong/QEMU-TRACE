@@ -72,10 +72,10 @@ typedef struct CPUTLBEntry {
     target_ulong addr_read;
     target_ulong addr_write;
     target_ulong addr_code;
-    hwaddr       addr_phys;
     /* Addend to virtual address to get host address.  IO accesses
        use the corresponding iotlb value.  */
     uintptr_t addend;
+    uintptr_t phys_addend; /* guest paddr - vaddr */
     /* padding to get a power of two size */
     uint8_t dummy[(1 << CPU_TLB_ENTRY_BITS) -
                   (sizeof(target_ulong) * 4 +
@@ -124,13 +124,14 @@ typedef struct CPUWatchpoint {
     QTAILQ_ENTRY(CPUWatchpoint) entry;
 } CPUWatchpoint;
 
-typedef struct CPUFetchStoreShadow {
-    target_ulong vaddr[8];
-    target_ulong paddr[8];
-    target_ulong bsize[8];
-    target_ulong prevalue[8];
-    target_ulong pstvalue[8];
-} CPUFetchStoreShadow;
+typedef struct CPUFetchStore {
+    target_ulong bsize;
+    target_ulong vaddr;
+    hwaddr       pri_paddr;
+    hwaddr       sec_paddr;
+    uint64_t     prevalue;
+    uint64_t     pstvalue;
+} CPUFetchStore;
 
 #define CPU_TEMP_BUF_NLONGS 128
 #define CPU_COMMON                                                      \

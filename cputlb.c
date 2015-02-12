@@ -38,6 +38,7 @@ static const CPUTLBEntry s_cputlb_empty_entry = {
     .addr_write = -1,
     .addr_code  = -1,
     .addend     = -1,
+    .phys_addend= -1,
 };
 
 /* NOTE:
@@ -234,19 +235,18 @@ static void tlb_add_large_page(CPUArchState *env, target_ulong vaddr,
 }
 
 /* Maps a virtual address to a physical without fail. */
-hwaddr tlb_fetch_xlate_after_refill_no_fail(CPUArchState *env, 
-                                            target_ulong vaddr, 
-                                            unsigned mmu_idx)
+hwaddr tlb_code_xlate_no_fail(CPUArchState *env, 
+                              target_ulong vaddr, 
+                              unsigned mmu_idx)
 {
     unsigned page_offset= (vaddr & ((1<<TARGET_PAGE_BITS)-1));
     unsigned page_index = (vaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
     if (unlikely(env->tlb_table[mmu_idx][page_index].addr_read!=
-                (vaddr & (TARGET_PAGE_MASK)))) 
-    {
+                (vaddr & (TARGET_PAGE_MASK))))  {
         QTRACE_ERROR("failed translation. QTRACE_PCTRACE_PMA incorrect\n"); 
     }
 
-    return env->tlb_table[mmu_idx][page_index].addr_phys | page_offset;
+    return env->tlb_table[mmu_idx][page_index].phys_addend + vaddr;
 }
 
 
@@ -275,7 +275,7 @@ void tlb_fetch_xlate_no_fail(CPUArchState *env, uint32_t offset, uint64_t bamask
         QTRACE_ERROR("failed to xlate vpc to ppc. QTRACE_PCTRACE_PMA broken!\n");
     }
     
-    *(uint64_t*)(vaddraddr) = env->tlb_table[mmu_idx][page_index].addr_phys | page_offset; 
+    *(uint64_t*)(vaddraddr) = env->tlb_table[mmu_idx][page_index].phys_addend | page_offset; 
 }
 
 /* Add a new TLB entry. At most one entry for a given virtual address
@@ -327,7 +327,7 @@ void tlb_set_page(CPUArchState *env, target_ulong vaddr,
     env->iotlb[mmu_idx][index] = iotlb - vaddr;
     te = &env->tlb_table[mmu_idx][index];
     te->addend = addend - vaddr;
-    te->addr_phys = paddr;
+    te->phys_addend = paddr - vaddr;
     if (prot & PAGE_READ) {
         te->addr_read = address;
     } else {
@@ -388,38 +388,6 @@ tb_page_addr_t get_page_addr_code(CPUArchState *env1, target_ulong addr)
     p = (void *)((uintptr_t)addr + env1->tlb_table[mmu_idx][page_index].addend);
     return qemu_ram_addr_from_host_nofail(p);
 }
-
-void qtrace_assemble_fetch_mda(CPUArchState *env)
-{
-    int idx;
-    hwaddr page_first, page_second;
-    CPUFetchStoreShadow *b = &env->fetch_shadow;
-    if (env->multipage_fetch) 
-    {
-        b->paddr[1]    = QTRACE_FIND_DIFFERENT_PAGE(env->multipage_fetch_count,
-                                                    env->fetch_shadow.paddr);
-
-        /* go through every byte load and assemble the load value */
-        b->prevalue[0] = QTRACE_ASSEMBLE_MULTIBYTE_VALUE(env->multipage_fetch_count, 
-                                                         env->fetch_shadow.prevalue);
-        b->pstvalue[0] = QTRACE_ASSEMBLE_MULTIBYTE_VALUE(env->multipage_fetch_count, 
-                                                         env->fetch_shadow.pstvalue);
-
-    }
-    /* reset */
-    env->multipage_fetch       = 0;
-    env->multipage_fetch_count = 0;
-    return;
-}
-
-void qtrace_assemble_store_mda(CPUArchState *env)
-{
-    env->multipage_fetch = 0;
-    env->multipage_store = 0;
-    env->multipage_fetch_count = 0;
-    env->multipage_store_count = 0;
-}
-
 
 #define MMUSUFFIX _cmmu
 #undef GETPC

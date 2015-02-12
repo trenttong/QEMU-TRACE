@@ -628,7 +628,7 @@ int cpu_exec(CPUArchState *env)
                 }
 #endif /* DEBUG_DISAS */
                 /* handle QTRACE commands */
-                qtrace_cpu_handle_cmds(env);
+                ///qtrace_cpu_handle_cmds(env);
 
                 spin_lock(&tcg_ctx.tb_ctx.tb_lock);
                 tb = tb_find_fast(env);

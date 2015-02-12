@@ -7,7 +7,7 @@
 #include "qtrace-client-header.h"
 #include <stdio.h>
 
-#define QTRACE_BRANCHTRACE_PCTRACE 1 
+#define QTRACE_BRANCHTRACE_PCTRACE 0 
 #define QTRACE_BRANCHTRACE_NVTRACE 1 
 
 PageWalkContext ptw;
@@ -29,8 +29,7 @@ void InstructionCallBack(unsigned type)
     /// -------------------------------------------------------- ///
     /// instrumenting virtual program counter and brancg target  ///
     /// -------------------------------------------------------- ///
-    if (QTRACE_TEST_X86_JMP(type))
-    {
+    if (TEST_QTRACE_IS_X86_JMP(type)) {
 #if QTRACE_BRANCHTRACE_PCTRACE
         QTRACE_INSTRUCTION_INSTRUMENT(QTRACE_BEGIN_ARG,
                                       QTRACE_IPOINT_AFTER, 

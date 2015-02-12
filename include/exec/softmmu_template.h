@@ -112,40 +112,38 @@
 # define helper_te_st_name  helper_le_st_name
 #endif
 
-#define QTRACE_INSTRUMENT_MULTIPAGE_DATA_FETCH()                             \
-do  {                                                                        \
-    env->multipage_fetch = 1;                                                \
+/* there is not much information on what is instrumented. assume conservatively. */
+#define QTRACE_INSTRUMENT_DATA_FETCH(env, pre, pst)                     \
+do {                                                                    \
+   env->store_shadow.vaddr = addr;                                      \
+   env->fetch_shadow.pri_paddr = addr +                                 \
+                             env->tlb_table[mmu_idx][index].phys_addend;\
+   env->fetch_shadow.bsize = DATA_SIZE;                                 \
+   env->fetch_shadow.prevalue = pre;                                    \
+   env->fetch_shadow.pstvalue = pst;                                    \
+} while(0);
+#define QTRACE_INSTRUMENT_DATA_FETCH_MP(env, pre, pst)                  \
+do {                                                                    \
+   QTRACE_INSTRUMENT_DATA_FETCH(env, pre, pst)                          \
+   env->fetch_shadow.sec_paddr = ((addr+DATA_SIZE) & TARGET_PAGE_MASK)+ \
+                           env->tlb_table[mmu_idx][index+1].phys_addend;\
 } while(0);
 
-#define QTRACE_INSTRUMENT_MULTIPAGE_DATA_STORE()                             \
-do  {                                                                        \
-    env->multipage_store = 1;                                                \
+#define QTRACE_INSTRUMENT_DATA_STORE(env, pre, pst)                     \
+do {                                                                    \
+   env->store_shadow.vaddr = addr;                                      \
+   env->store_shadow.pri_paddr = addr +                                 \
+                             env->tlb_table[mmu_idx][index].phys_addend;\
+   env->store_shadow.bsize = DATA_SIZE;                                 \
+   env->store_shadow.prevalue = pre;                                    \
+   env->store_shadow.pstvalue = pst;                                    \
 } while(0);
 
-#define QTRACE_INSTRUMENT_DATA_FETCH()                                       \
-do  {                                                                        \
-    int i = env->multipage_fetch_count;                                      \
-    int offset = addr & ~TARGET_PAGE_MASK;                                   \
-    hwaddr paddr = env->tlb_table[mmu_idx][index].addr_phys;                 \
-    env->fetch_shadow.vaddr[i] = addr;                                       \
-    env->fetch_shadow.paddr[i] = offset | paddr;                             \
-    env->fetch_shadow.bsize[i] = DATA_SIZE;                                  \
-    env->fetch_shadow.prevalue[i] = res;                                     \
-    env->fetch_shadow.pstvalue[i] = res;                                     \
-    env->multipage_fetch_count ++;                                           \
-} while(0);
-
-#define QTRACE_INSTRUMENT_DATA_STORE()                                       \
-do  {                                                                        \
-    int i = env->multipage_store_count;                                      \
-    int offset = addr & ~TARGET_PAGE_MASK;                                   \
-    hwaddr paddr = env->tlb_table[mmu_idx][index].addr_phys;                 \
-    env->store_shadow.vaddr[i] = addr;                                       \
-    env->store_shadow.paddr[i] = offset | paddr;                             \
-    env->store_shadow.bsize[i] = DATA_SIZE;                                  \
-    env->store_shadow.prevalue[i] = res;                                     \
-    env->store_shadow.pstvalue[i] = res;                                     \
-    env->multipage_store_count ++;                                           \
+#define QTRACE_INSTRUMENT_DATA_STORE_MP(env, pre, pst)                  \
+do {                                                                    \
+   QTRACE_INSTRUMENT_DATA_STORE(env, pre, pst)                          \
+   env->store_shadow.sec_paddr = ((addr+DATA_SIZE) & TARGET_PAGE_MASK)+ \
+                           env->tlb_table[mmu_idx][index+1].phys_addend;\
 } while(0);
 
 static inline DATA_TYPE glue(io_read, SUFFIX)(CPUArchState *env,
@@ -217,11 +215,6 @@ WORD_TYPE helper_le_ld_name(CPUArchState *env, target_ulong addr, int mmu_idx,
 #ifdef ALIGNED_ONLY
         do_unaligned_access(env, addr, READ_ACCESS_TYPE, mmu_idx, retaddr);
 #endif
-
-#ifdef SOFTMMU_CODE_ACCESS
-#else
-        QTRACE_INSTRUMENT_MULTIPAGE_DATA_FETCH();
-#endif
         /* XXX: not efficient, but simple */
         /* Note: relies on the fact that tlb_fill() does not remove the
          * previous page from the TLB cache.  */
@@ -232,9 +225,10 @@ WORD_TYPE helper_le_ld_name(CPUArchState *env, target_ulong addr, int mmu_idx,
                Undo that for the recursion.  */
             res |= glue(helper_ldb, MMUSUFFIX)(env, addr + i, mmu_idx);
         }
-
-        //printf("res is 0x%lx and size is %d\n", res, DATA_SIZE);
-
+#ifndef SOFTMMU_CODE_ACCESS
+        QTRACE_INSTRUMENT_DATA_FETCH_MP(env, res, res);
+        QTRACE_INSTRUMENT_DATA_FETCH_MP(env->shadowcpu, res, res);
+#endif
         return res;
     }
 
@@ -252,11 +246,10 @@ WORD_TYPE helper_le_ld_name(CPUArchState *env, target_ulong addr, int mmu_idx,
     res = glue(glue(ld, LSUFFIX), _le_p)((uint8_t *)haddr);
 #endif
 
-#ifdef SOFTMMU_CODE_ACCESS
-#else
-    QTRACE_INSTRUMENT_DATA_FETCH();
+#ifndef SOFTMMU_CODE_ACCESS
+    QTRACE_INSTRUMENT_DATA_FETCH(env, res, res);
+    QTRACE_INSTRUMENT_DATA_FETCH(env->shadowcpu, res, res);
 #endif
-
     return res;
 }
 
@@ -311,11 +304,6 @@ WORD_TYPE helper_be_ld_name(CPUArchState *env, target_ulong addr, int mmu_idx,
 #ifdef ALIGNED_ONLY
         do_unaligned_access(env, addr, READ_ACCESS_TYPE, mmu_idx, retaddr);
 #endif
-
-#ifdef SOFTMMU_CODE_ACCESS
-#else
-        QTRACE_INSTRUMENT_MULTIPAGE_DATA_FETCH();
-#endif
         for (i = 0; i < DATA_SIZE; i++) {
             res <<= 8;
             /* Little-endian extract.  */
@@ -323,6 +311,11 @@ WORD_TYPE helper_be_ld_name(CPUArchState *env, target_ulong addr, int mmu_idx,
                Undo that for the recursion.  */
             res |= glue(helper_ldb, MMUSUFFIX)(env, addr + i, mmu_idx);
         }
+#ifndef SOFTMMU_CODE_ACCESS
+        /* do the instrumentation */
+        QTRACE_INSTRUMENT_DATA_FETCH_MP(env, res, res);
+        QTRACE_INSTRUMENT_DATA_FETCH_MP(env->shadowcpu, res, res);
+#endif
         return res;
     }
 
@@ -336,9 +329,10 @@ WORD_TYPE helper_be_ld_name(CPUArchState *env, target_ulong addr, int mmu_idx,
     haddr = addr + env->tlb_table[mmu_idx][index].addend;
     res = glue(glue(ld, LSUFFIX), _be_p)((uint8_t *)haddr);
 
-#ifdef SOFTMMU_CODE_ACCESS
-#else
-    QTRACE_INSTRUMENT_DATA_FETCH();
+#ifndef SOFTMMU_CODE_ACCESS
+    /* do the instrumentation */
+    QTRACE_INSTRUMENT_DATA_FETCH(env, res, res);
+    QTRACE_INSTRUMENT_DATA_FETCH(env->shadowcpu, res, res);
 #endif
 
     return res;
@@ -437,8 +431,15 @@ void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
 #ifdef ALIGNED_ONLY
         do_unaligned_access(env, addr, 1, mmu_idx, retaddr);
 #endif
-
-        QTRACE_INSTRUMENT_MULTIPAGE_DATA_STORE();
+        /* load what is about to be clobbered for instrumentation */
+        res = 0;
+        for (i = DATA_SIZE - 1; i >= 0; i--) {
+            res <<= 8;
+            /* Little-endian extract.  */
+            /* Note the adjustment at the beginning of the function.
+               Undo that for the recursion.  */
+            res |= glue(helper_ldb, MMUSUFFIX)(env, addr + i, mmu_idx);
+        }
 
         /* XXX: not efficient, but simple */
         /* Note: relies on the fact that tlb_fill() does not remove the
@@ -451,6 +452,10 @@ void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
             glue(helper_ret_stb, MMUSUFFIX)(env, addr + i, val8,
                                             mmu_idx, retaddr + GETPC_ADJ);
         }
+
+        /* do the instrumentation */
+        QTRACE_INSTRUMENT_DATA_STORE_MP(env, res, val);
+        QTRACE_INSTRUMENT_DATA_STORE_MP(env->shadowcpu, res, val);
         return;
     }
 
@@ -463,16 +468,18 @@ void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
 
     haddr = addr + env->tlb_table[mmu_idx][index].addend;
 #if DATA_SIZE == 1
-    /* Load the pre-store memory value */
+    /* load the preinst memory value */
     res = glue(glue(ld, LSUFFIX), _p)((uint8_t *)haddr);
     glue(glue(st, SUFFIX), _p)((uint8_t *)haddr, val);
 #else
-    /* Load the pre-store memory value */
+    /* load the preinst memory value */
     res = glue(glue(ld, LSUFFIX), _le_p)((uint8_t *)haddr);
     glue(glue(st, SUFFIX), _le_p)((uint8_t *)haddr, val);
 #endif
 
-    QTRACE_INSTRUMENT_DATA_STORE();
+    /* do the instrumentation */
+    QTRACE_INSTRUMENT_DATA_STORE(env, res, val);
+    QTRACE_INSTRUMENT_DATA_STORE(env->shadowcpu, res, val);
 }
 
 #if DATA_SIZE > 1
@@ -523,8 +530,15 @@ void helper_be_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
 #ifdef ALIGNED_ONLY
         do_unaligned_access(env, addr, 1, mmu_idx, retaddr);
 #endif
-
-        QTRACE_INSTRUMENT_MULTIPAGE_DATA_STORE();
+        /* load what is about to be clobbered for instrumentation */
+        res = 0;
+        for (i = 0; i < DATA_SIZE; i++) {
+            res <<= 8;
+            /* Little-endian extract.  */
+            /* Note the adjustment at the beginning of the function.
+               Undo that for the recursion.  */
+            res |= glue(helper_ldb, MMUSUFFIX)(env, addr + i, mmu_idx);
+        }
 
         /* XXX: not efficient, but simple */
         /* Note: relies on the fact that tlb_fill() does not remove the
@@ -538,6 +552,9 @@ void helper_be_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
                                             mmu_idx, retaddr + GETPC_ADJ);
         }
 
+        /* do the instrumentation */
+        QTRACE_INSTRUMENT_DATA_STORE_MP(env, res, val);
+        QTRACE_INSTRUMENT_DATA_STORE_MP(env->shadowcpu, res, val);
         return;
     }
 
@@ -549,11 +566,12 @@ void helper_be_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
 #endif
 
     haddr = addr + env->tlb_table[mmu_idx][index].addend;
-    /* Load the pre-store memory value */
+    /* load the pre-store memory value */
     res = glue(glue(ld, LSUFFIX), _be_p)((uint8_t *)haddr);
     glue(glue(st, SUFFIX), _be_p)((uint8_t *)haddr, val);
 
-    QTRACE_INSTRUMENT_DATA_STORE();
+    QTRACE_INSTRUMENT_DATA_STORE(env, res, val);
+    QTRACE_INSTRUMENT_DATA_STORE(env->shadowcpu, res, val);
 }
 #endif /* DATA_SIZE > 1 */
 
@@ -592,5 +610,3 @@ glue(glue(helper_st, SUFFIX), MMUSUFFIX)(CPUArchState *env, target_ulong addr,
 #undef helper_te_st_name
 #undef QTRACE_INSTRUMENT_DATA_FETCH
 #undef QTRACE_INSTRUMENT_DATA_STORE
-#undef QTRACE_INSTRUMENT_MULTIPAGE_DATA_FETCH
-#undef QTRACE_INSTRUMENT_MULTIPAGE_DATA_STORE

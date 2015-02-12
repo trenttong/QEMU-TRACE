@@ -531,7 +531,7 @@ void cpu_x86_xlate_by_walking_pt(CPUX86State* env, target_ulong addr,
     }
     if (likely(addr_touse==(addr & (TARGET_PAGE_MASK)))) 
     {
-        ret->paddr = env->tlb_table[mmu_idx][page_index].addr_phys | page_offset;
+        ret->paddr = env->tlb_table[mmu_idx][page_index].phys_addend | page_offset;
         return;
     }
 

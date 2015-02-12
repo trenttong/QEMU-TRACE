@@ -42,8 +42,8 @@
 
 #ifndef QTRACE_PRINT_OFF
 #define QTRACE_ARG_PRINT(format, ...)   { printf(format, ##__VA_ARGS__); }
-#define QTRACE_WARN(format, ...)        { printf("QEMU_WARN: ");  printf(format, ##__VA_ARGS__); } 
-#define QTRACE_ERROR(format, ...)       { printf("QEMU_ERROR: "); printf(format, ##__VA_ARGS__); }
+#define QTRACE_WARN(format, ...)        { printf("QEMU_WARN: ");  printf(format, ##__VA_ARGS__); exit(-1);} 
+#define QTRACE_ERROR(format, ...)       { printf("QEMU_ERROR: "); printf(format, ##__VA_ARGS__); exit(-1);}
 #else 
 #define QTRACE_ARG_PRINT(format, ...)
 #define QTRACE_WARN(format, ...)

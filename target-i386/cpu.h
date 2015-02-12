@@ -765,6 +765,7 @@ typedef struct CPUX86State {
     /* standard registers */
     target_ulong regs[CPU_NB_REGS];
     target_ulong eip;
+    target_ulong linear_eip;
     target_ulong eflags; /* eflags register. During CPU emulation, CC
                         flags and DF are set to zero because they are
                         stored elsewhere */
@@ -928,21 +929,14 @@ typedef struct CPUX86State {
     TPRAccess tpr_access_type;
 
     /* QTRACE - hidden register states */
-    target_ulong linear_eip;
     target_ulong branch_eip;
     uint64_t     physical_eip;
 
-    /* QTRACE - register shadowing */
+    /* register and memory shadowing */
     struct CPUX86State *shadowcpu;
     uint64_t shadowcpu_offset;
-
-    /* QTRACE - memory shadowing */
-    int multipage_fetch;
-    int multipage_store;
-    int multipage_fetch_count;
-    int multipage_store_count;
-    CPUFetchStoreShadow fetch_shadow;
-    CPUFetchStoreShadow store_shadow; 
+    CPUFetchStore fetch_shadow;
+    CPUFetchStore store_shadow; 
 } CPUX86State;
 
 #include "cpu-qom.h"
